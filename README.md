@@ -1,73 +1,131 @@
-# React + TypeScript + Vite
+# Coding War
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern online judge platform built with React, TypeScript, and Vite.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- 🚀 **Modern Tech Stack**: React 18, TypeScript, Vite
+- 🎨 **Beautiful UI**: Tailwind CSS with dark mode support
+- 📱 **Responsive Design**: Mobile-first approach
+- ⚡ **Fast Performance**: Optimized builds and lazy loading
+- 🧪 **Comprehensive Testing**: Unit, integration, and E2E tests
+- ♿ **Accessibility**: WCAG 2.1 AA compliant
+- 🔄 **Real-time Updates**: WebSocket integration
+- 📊 **Analytics**: Built-in charts and statistics
 
-## React Compiler
+## Getting Started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Prerequisites
 
-## Expanding the ESLint configuration
+- Node.js >= 18.0.0
+- npm >= 8.0.0
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Installation
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd coding-war
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+2. Install dependencies:
+```bash
+npm install
 ```
+
+3. Copy environment variables:
+```bash
+cp .env.example .env
+```
+
+4. Start the development server:
+```bash
+npm run dev
+```
+
+The application will be available at `http://localhost:5173`.
+
+## Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run lint` - Run ESLint
+- `npm run lint:fix` - Fix ESLint errors
+- `npm run type-check` - Run TypeScript type checking
+- `npm run format` - Format code with Prettier
+- `npm run test` - Run unit tests
+- `npm run test:coverage` - Run tests with coverage
+- `npm run test:e2e` - Run E2E tests
+- `npm run storybook` - Start Storybook
+
+## Project Structure
+
+```
+src/
+├── components/          # Reusable UI components
+│   ├── ui/             # Basic UI components
+│   └── layout/         # Layout components
+├── pages/              # Page components
+│   ├── Problems/       # Problem-related pages
+│   ├── Contests/       # Contest-related pages
+│   ├── Users/          # User-related pages
+│   └── Admin/          # Admin pages
+├── hooks/              # Custom React hooks
+├── utils/              # Utility functions
+├── types/              # TypeScript type definitions
+├── api/                # API client and services
+├── stores/             # State management
+├── assets/             # Static assets
+└── test/               # Test utilities and setup
+```
+
+## Technology Stack
+
+### Core
+- **React 18** - UI library
+- **TypeScript** - Type safety
+- **Vite** - Build tool and dev server
+
+### Styling
+- **Tailwind CSS** - Utility-first CSS framework
+- **Headless UI** - Unstyled, accessible UI components
+- **Lucide React** - Icon library
+- **Framer Motion** - Animation library
+
+### State Management
+- **Zustand** - Lightweight state management
+- **TanStack Query** - Server state management
+
+### Development Tools
+- **ESLint** - Code linting
+- **Prettier** - Code formatting
+- **Vitest** - Unit testing
+- **Playwright** - E2E testing
+- **Storybook** - Component development
+
+### Additional Libraries
+- **React Router** - Client-side routing
+- **React Hook Form** - Form handling
+- **Zod** - Schema validation
+- **Axios** - HTTP client
+- **Chart.js** - Data visualization
+- **Monaco Editor** - Code editor
+- **React Hot Toast** - Notifications
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m 'Add amazing feature'`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Inspired by the DMOJ Online Judge platform
+- Built with modern web technologies and best practices
