@@ -1,0 +1,203 @@
+// Prisma Schema for Coding War MVP
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String   @id @default(uuid())
+  username          String   @unique @db.VarChar(20)
+  email             String   @unique @db.VarChar(255)
+  passwordHash      String   @db.VarChar(255)
+  role              Role     @default(USER)
+  isEmailVerified   Boolean  @default(false)
+  emailVerifyToken  String?  @unique
+  emailVerifyExpiry DateTime?
+  passwordResetToken String? @unique
+  passwordResetExpiry DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  submissions       Submission[]
+  contestParticipations ContestParticipant[]
+  
+  @@index([email])
+  @@index([username])
+}
+
+enum Role {
+  ADMIN
+  USER
+  GUEST
+}
+
+model Problem {
+  id              String   @id @default(uuid())
+  title           String   @db.VarChar(255)
+  slug            String   @unique @db.VarChar(255)
+  description     String   @db.Text
+  difficulty      Difficulty
+  timeLimit       Int      // milliseconds
+  memoryLimit     Int      // MB
+  tags            String[]
+  visibility      Visibility @default(PUBLIC)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  testCases       TestCase[]
+  submissions     Submission[]
+  contestProblems ContestProblem[]
+  
+  @@index([difficulty])
+  @@index([visibility])
+  @@index([slug])
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Visibility {
+  PUBLIC
+  PRIVATE
+  CONTEST_ONLY
+}
+
+model TestCase {
+  id          String   @id @default(uuid())
+  problemId   String
+  problem     Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  inputFile   String   @db.Text  // S3 path or file content
+  outputFile  String   @db.Text  // S3 path or file content
+  isHidden    Boolean  @default(true)  // Hidden from users
+  orderIndex  Int
+  createdAt   DateTime @default(now())
+  
+  testCaseResults TestCaseResult[]
+  
+  @@index([problemId])
+  @@index([problemId, orderIndex])
+}
+
+model Submission {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  problemId       String
+  problem         Problem  @relation(fields: [problemId], references: [id])
+  contestId       String?
+  contest         Contest? @relation(fields: [contestId], references: [id])
+  language        Language
+  sourceCode      String   @db.Text
+  status          SubmissionStatus @default(QUEUED)
+  verdict         String?  @db.VarChar(50)
+  executionTime   Int?     // milliseconds
+  memoryUsed      Int?     // MB
+  compilationError String? @db.Text
+  submittedAt     DateTime @default(now())
+  judgedAt        DateTime?
+  contestRelativeTime Int? // Minutes from contest start (for contest submissions)
+  
+  testCaseResults TestCaseResult[]
+  
+  @@index([userId])
+  @@index([problemId])
+  @@index([contestId])
+  @@index([status])
+  @@index([submittedAt])
+}
+
+enum Language {
+  C
+  CPP
+  PYTHON
+  JAVA
+}
+
+enum SubmissionStatus {
+  QUEUED
+  COMPILING
+  RUNNING
+  ACCEPTED
+  WRONG_ANSWER
+  TIME_LIMIT_EXCEEDED
+  MEMORY_LIMIT_EXCEEDED
+  RUNTIME_ERROR
+  COMPILATION_ERROR
+}
+
+model TestCaseResult {
+  id            String     @id @default(uuid())
+  submissionId  String
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  testCaseId    String
+  testCase      TestCase   @relation(fields: [testCaseId], references: [id])
+  status        SubmissionStatus
+  executionTime Int?       // milliseconds
+  memoryUsed    Int?       // MB
+  output        String?    @db.Text
+  
+  @@index([submissionId])
+  @@index([testCaseId])
+}
+
+model Contest {
+  id              String   @id @default(uuid())
+  title           String   @db.VarChar(255)
+  slug            String   @unique @db.VarChar(255)
+  description     String   @db.Text
+  startTime       DateTime
+  endTime         DateTime
+  freezeTime      Int?     // Minutes before end
+  scoringRule     ScoringRule
+  visibility      Visibility @default(PUBLIC)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  problems        ContestProblem[]
+  participants    ContestParticipant[]
+  submissions     Submission[]
+  
+  @@index([startTime])
+  @@index([endTime])
+  @@index([slug])
+}
+
+enum ScoringRule {
+  IOI
+  ACM
+}
+
+model ContestProblem {
+  id          String   @id @default(uuid())
+  contestId   String
+  contest     Contest  @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  problemId   String
+  problem     Problem  @relation(fields: [problemId], references: [id])
+  orderIndex  Int
+  points      Int?     // For IOI scoring
+  
+  @@unique([contestId, problemId])
+  @@index([contestId])
+  @@index([problemId])
+}
+
+model ContestParticipant {
+  id          String   @id @default(uuid())
+  contestId   String
+  contest     Contest  @relation(fields: [contestId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  registeredAt DateTime @default(now())
+  
+  @@unique([contestId, userId])
+  @@index([contestId])
+  @@index([userId])
+}
