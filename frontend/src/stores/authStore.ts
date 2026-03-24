@@ -1,139 +1,54 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { authApi } from '../api/auth';
-
-export interface User {
-  id: string;
-  username: string;
-  email: string;
-  displayName: string;
-  avatar?: string;
-  isStaff: boolean;
-  isSuperuser: boolean;
-  rating: number;
-  maxRating: number;
-  joinDate: Date;
-  lastLogin?: Date;
-}
-
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
-
-export interface RegisterData {
-  username: string;
-  email: string;
-  password: string;
-  confirmPassword?: string;
-}
+import type { User } from '../types/api';
 
 interface AuthState {
   user: User | null;
+  accessToken: string | null;
+  refreshToken: string | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (credentials: LoginCredentials) => Promise<void>;
+
+  setUser: (user: User) => void;
+  setTokens: (accessToken: string, refreshToken: string) => void;
+  setAccessToken: (accessToken: string) => void;
   logout: () => void;
-  register: (data: RegisterData) => Promise<{ message: string; userId: string }>;
-  setUser: (user: User | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    set => ({
+    (set) => ({
       user: null,
+      accessToken: null,
+      refreshToken: null,
       isAuthenticated: false,
-      isLoading: false,
 
-      login: async (credentials: LoginCredentials) => {
-        set({ isLoading: true });
-        try {
-          // Call actual API
-          const response = await authApi.login({
-            emailOrUsername: credentials.username,
-            password: credentials.password,
-          });
+      setUser: (user) => set({ user, isAuthenticated: true }),
 
-          // Store tokens
-          localStorage.setItem('accessToken', response.accessToken);
-          localStorage.setItem('refreshToken', response.refreshToken);
+      setTokens: (accessToken, refreshToken) =>
+        set({ accessToken, refreshToken, isAuthenticated: true }),
 
-          // Map API user to store user
-          const user: User = {
-            id: response.user.id,
-            username: response.user.username,
-            email: response.user.email,
-            displayName: response.user.username,
-            isStaff: response.user.role === 'ADMIN',
-            isSuperuser: response.user.role === 'ADMIN',
-            rating: 1200,
-            maxRating: 1200,
-            joinDate: new Date(),
-            lastLogin: new Date(),
-          };
+      setAccessToken: (accessToken) => set({ accessToken }),
 
-          set({
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-          });
-        } catch (error) {
-          set({ isLoading: false });
-          throw error;
-        }
-      },
-
-      logout: () => {
-        // Clear tokens
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        
+      logout: () =>
         set({
           user: null,
+          accessToken: null,
+          refreshToken: null,
           isAuthenticated: false,
-        });
-      },
-
-      register: async (data: RegisterData) => {
-        set({ isLoading: true });
-        try {
-          // Call actual API - only send required fields
-          const response = await authApi.register({
-            username: data.username,
-            email: data.email,
-            password: data.password,
-          });
-
-          // Registration successful - user needs to verify email
-          // Don't auto-login, just clear loading state
-          set({
-            isLoading: false,
-          });
-          
-          return response;
-        } catch (error: any) {
-          set({ isLoading: false });
-          // Re-throw with better error message
-          if (error.response?.data) {
-            throw new Error(error.response.data.message || 'Registration failed');
-          }
-          throw error;
-        }
-      },
-
-      setUser: (user: User | null) => {
-        set({
-          user,
-          isAuthenticated: !!user,
-        });
-      },
+        }),
     }),
     {
       name: 'auth-storage',
-      partialize: state => ({
+      partialize: (state) => ({
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
         user: state.user,
-        isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state && state.user && state.accessToken) {
+          state.isAuthenticated = true;
+        }
+      },
     }
   )
 );

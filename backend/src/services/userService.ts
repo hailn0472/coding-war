@@ -95,6 +95,24 @@ export async function getUserProfile(
         .then((results) => results.length),
     ]);
 
+  // Get recent submissions
+  const recentSubmissions = await prisma.submission.findMany({
+    where: { userId },
+    select: {
+      id: true,
+      problemId: true,
+      problem: { select: { title: true } },
+      language: true,
+      status: true,
+      verdict: true,
+      executionTime: true,
+      memoryUsed: true,
+      submittedAt: true,
+    },
+    orderBy: { submittedAt: 'desc' },
+    take: 10,
+  });
+
   return {
     id: user.id,
     username: user.username,
@@ -107,6 +125,17 @@ export async function getUserProfile(
       solvedProblems,
       contestsParticipated,
     },
+    recentSubmissions: recentSubmissions.map((s) => ({
+      id: s.id,
+      problemId: s.problemId,
+      problemTitle: s.problem.title,
+      language: s.language,
+      status: s.status,
+      verdict: s.verdict,
+      executionTime: s.executionTime,
+      memoryUsed: s.memoryUsed,
+      submittedAt: s.submittedAt,
+    })),
   };
 }
 

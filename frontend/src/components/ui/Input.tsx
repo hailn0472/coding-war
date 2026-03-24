@@ -1,64 +1,60 @@
-import React, { forwardRef } from 'react';
-import { cn } from '@/utils';
+import { type InputHTMLAttributes, forwardRef } from 'react';
 
-export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  success?: string;
   helperText?: string;
-  leftIcon?: React.ReactNode;
-  rightIcon?: React.ReactNode;
 }
 
-export const Input = forwardRef<HTMLInputElement, InputProps>(
-  (
-    {
-      className,
-      type,
-      label,
-      error,
-      helperText,
-      leftIcon,
-      rightIcon,
-      ...props
-    },
-    ref
-  ) => {
+const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ label, error, success, helperText, className = '', id, ...props }, ref) => {
+    const inputId = id || `input-${Math.random().toString(36).substr(2, 9)}`;
+    const errorId = `${inputId}-error`;
+    const helperId = `${inputId}-helper`;
+    
+    const baseStyles = 'w-full px-3 py-2 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-0 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:text-white';
+    
+    const stateStyles = error
+      ? 'border-2 border-red-500 focus:ring-red-500'
+      : success
+      ? 'border-2 border-green-500 focus:ring-green-500'
+      : 'border border-gray-300 focus:ring-blue-500 focus:border-transparent dark:border-gray-600';
+    
     return (
-      <div className="space-y-2">
+      <div className="w-full">
         {label && (
-          <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          <label
+            htmlFor={inputId}
+            className={`block text-sm font-medium mb-2 ${
+              props.disabled ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-300'
+            }`}
+          >
             {label}
           </label>
         )}
-        <div className="relative">
-          {leftIcon && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 transform text-gray-400">
-              {leftIcon}
-            </div>
-          )}
-          <input
-            type={type}
-            className={cn(
-              'border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm file:border-0 file:bg-transparent file:text-sm file:font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-              leftIcon && 'pl-10',
-              rightIcon && 'pr-10',
-              error && 'border-red-500 focus-visible:ring-red-500',
-              className
-            )}
-            ref={ref}
-            {...props}
-          />
-          {rightIcon && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 transform text-gray-400">
-              {rightIcon}
-            </div>
-          )}
-        </div>
+        <input
+          ref={ref}
+          id={inputId}
+          className={`${baseStyles} ${stateStyles} ${className}`}
+          aria-invalid={error ? 'true' : 'false'}
+          aria-describedby={error ? errorId : helperText ? helperId : undefined}
+          {...props}
+        />
         {error && (
-          <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+          <p id={errorId} className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {error}
+          </p>
         )}
-        {helperText && !error && (
-          <p className="text-muted-foreground text-sm">{helperText}</p>
+        {success && !error && (
+          <p className="mt-1 text-sm text-green-600 dark:text-green-400">
+            {success}
+          </p>
+        )}
+        {helperText && !error && !success && (
+          <p id={helperId} className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {helperText}
+          </p>
         )}
       </div>
     );
@@ -66,3 +62,5 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 );
 
 Input.displayName = 'Input';
+
+export default Input;

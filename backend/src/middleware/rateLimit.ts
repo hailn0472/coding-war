@@ -40,8 +40,7 @@ export const generalRateLimiter = rateLimit({
   standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
   legacyHeaders: false, // Disable `X-RateLimit-*` headers
   store: new RedisStore({
-    // @ts-expect-error - RedisStore types are not fully compatible
-    client: redisClient,
+    sendCommand: (...args: string[]) => redisClient.sendCommand(args),
     prefix: 'rl:general:',
   }),
   handler: (req, res) => {
@@ -76,8 +75,7 @@ export const submissionRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({
-    // @ts-expect-error - RedisStore types are not fully compatible
-    client: redisClient,
+    sendCommand: (...args: string[]) => redisClient.sendCommand(args),
     prefix: 'rl:submission:',
   }),
   keyGenerator: (req) => {
@@ -115,8 +113,7 @@ export const loginRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   store: new RedisStore({
-    // @ts-expect-error - RedisStore types are not fully compatible
-    client: redisClient,
+    sendCommand: (...args: string[]) => redisClient.sendCommand(args),
     prefix: 'rl:login:',
   }),
   keyGenerator: (req) => {

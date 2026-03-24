@@ -30,7 +30,18 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(requestIdMiddleware);
 app.use(helmet());
-app.use(cors({ origin: process.env.CORS_ORIGIN || 'http://localhost:5173' }));
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174').split(',').map(o => o.trim());
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS not allowed for origin: ${origin}`));
+    }
+  },
+  credentials: true,
+}));
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

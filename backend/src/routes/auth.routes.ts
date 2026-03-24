@@ -12,9 +12,10 @@ import {
   generatePasswordResetToken,
 } from '../services/authService';
 import {
-  sendVerificationEmail,
+  // sendVerificationEmail, // TODO: Re-enable when email service is configured
   sendPasswordResetEmail,
 } from '../services/emailService';
+import { loginRateLimiter } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -47,7 +48,7 @@ const registerSchema = z.object({
 });
 
 const loginSchema = z.object({
-  emailOrUsername: z.string().min(1, 'Email or username is required'),
+  email: z.string().min(1, 'Email or username is required'),
   password: z.string().min(1, 'Password is required'),
 });
 
@@ -75,6 +76,7 @@ const resetPasswordSchema = z.object({
  */
 router.post(
   '/register',
+  loginRateLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Validate request body
@@ -112,12 +114,12 @@ router.post(
           emailVerifyToken,
           emailVerifyExpiry,
           role: 'USER',
-          isEmailVerified: false,
+          isEmailVerified: true, // Auto-verify for now (email service disabled)
         },
       });
 
-      // Send verification email
-      await sendVerificationEmail(email, emailVerifyToken, username);
+      // TODO: Re-enable when email service is configured
+      // await sendVerificationEmail(email, emailVerifyToken, username);
 
       res.status(201).json({
         message: 'User registered successfully. Please check your email to verify your account.',
@@ -201,10 +203,11 @@ router.post(
  */
 router.post(
   '/login',
+  loginRateLimiter,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       // Validate request body
-      const { emailOrUsername, password } = loginSchema.parse(req.body);
+      const { email: emailOrUsername, password } = loginSchema.parse(req.body);
 
       // Query user by email or username
       const user = await prisma.user.findFirst({

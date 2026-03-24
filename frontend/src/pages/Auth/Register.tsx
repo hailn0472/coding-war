@@ -1,152 +1,144 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
-import toast from 'react-hot-toast';
+import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { registerSchema, type RegisterFormData } from '../../utils/validation';
+import { authAPI } from '../../api/endpoints/auth';
 
-const Register: React.FC = () => {
-  const [formData, setFormData] = useState({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-  });
+function getPasswordStrength(password: string): { score: number; label: string } {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^a-zA-Z0-9]/.test(password)) score++;
+  const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+  return { score, label: labels[score] || '' };
+}
+
+export default function Register() {
   const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuthStore();
-  const navigate = useNavigate();
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const {
+    register,
+    handleSubmit,
+    watch,
+    formState: { errors },
+  } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+  });
 
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match');
-      return;
-    }
+  const watchPassword = watch('password', '');
+  const strength = useMemo(() => getPasswordStrength(watchPassword), [watchPassword]);
 
+  const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true);
-
+    setError(null);
     try {
-      const response = await register(formData);
-      toast.success(response?.message || 'Registration successful! Please check your email to verify your account.');
-      // Don't navigate to home, stay on register page or go to login
-      navigate('/login');
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      const errorMessage = error?.response?.data?.message || error?.message || 'Registration failed. Please try again.';
-      toast.error(errorMessage);
+      await authAPI.register(data);
+      setSuccess(true);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
   return (
-    <div className="mx-auto mt-8 max-w-md">
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">Join Coding War</h2>
-          <p className="card-description">
-            Create your account to start solving problems
-          </p>
+    <div className="auth-page">
+      <div className="auth-nav">
+        <div className="auth-nav-inner">
+          <Link to="/">Coding War</Link>
         </div>
-        <div className="card-content">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label
-                htmlFor="username"
-                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Username
-              </label>
-              <input
-                type="text"
-                id="username"
-                name="username"
-                value={formData.username}
-                onChange={handleChange}
-                className="input"
-                required
-              />
+      </div>
+      <div className="auth-container">
+        <div className="auth-box">
+          <h2>Sign up</h2>
+
+          {success ? (
+            <div className="auth-card">
+              <div className="status-box">
+                <div className="status-icon">✉️</div>
+                <h3>Registration Successful</h3>
+                <p style={{ color: '#666', fontSize: 13, margin: '8px 0 16px' }}>
+                  Your account has been created. You can now log in.
+                </p>
+                <Link to="/login" className="btn btn-primary btn-sm">Go to login</Link>
+              </div>
             </div>
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Email
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="input"
-                required
-              />
+          ) : (
+            <div className="auth-card">
+              <form onSubmit={handleSubmit(onSubmit)} className="form-stack">
+                {error && <div className="alert alert-error">{error}</div>}
+
+                <div className="form-group">
+                  <label htmlFor="reg-username" className="form-label">Username</label>
+                  <input
+                    id="reg-username"
+                    type="text"
+                    className={`form-input ${errors.username ? 'error' : ''}`}
+                    placeholder="3-20 alphanumeric characters"
+                    {...register('username')}
+                    disabled={isLoading}
+                    autoComplete="username"
+                  />
+                  {errors.username && <span className="form-error">{errors.username.message}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="reg-email" className="form-label">Email</label>
+                  <input
+                    id="reg-email"
+                    type="email"
+                    className={`form-input ${errors.email ? 'error' : ''}`}
+                    placeholder="you@example.com"
+                    {...register('email')}
+                    disabled={isLoading}
+                    autoComplete="email"
+                  />
+                  {errors.email && <span className="form-error">{errors.email.message}</span>}
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="reg-password" className="form-label">Password</label>
+                  <input
+                    id="reg-password"
+                    type="password"
+                    className={`form-input ${errors.password ? 'error' : ''}`}
+                    placeholder="Min 8 chars, mixed case + number"
+                    {...register('password')}
+                    disabled={isLoading}
+                    autoComplete="new-password"
+                  />
+                  {watchPassword && (
+                    <>
+                      <div className="password-strength">
+                        {[1, 2, 3, 4].map((i) => (
+                          <div
+                            key={i}
+                            className={`password-strength-bar${i <= strength.score ? ' active' : ''}${strength.score >= 3 ? ' strong' : strength.score >= 2 ? ' medium' : ''}`}
+                          />
+                        ))}
+                      </div>
+                      <div className="password-strength-text">{strength.label}</div>
+                    </>
+                  )}
+                  {errors.password && <span className="form-error">{errors.password.message}</span>}
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-full" disabled={isLoading}>
+                  {isLoading ? <><span className="spinner"></span> Creating...</> : 'Sign up'}
+                </button>
+              </form>
             </div>
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Password
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className="input"
-                required
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="confirmPassword"
-                className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
-              >
-                Confirm Password
-              </label>
-              <input
-                type="password"
-                id="confirmPassword"
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-                className="input"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="btn btn-primary btn-md w-full"
-            >
-              {isLoading ? 'Creating account...' : 'Sign up'}
-            </button>
-          </form>
-        </div>
-        <div className="card-footer">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
-            Already have an account?{' '}
-            <Link
-              to="/login"
-              className="font-medium text-primary-600 hover:text-primary-700"
-            >
-              Log in
-            </Link>
-          </p>
+          )}
+
+          <div className="auth-footer">
+            Already have an account? <Link to="/login">Log in</Link>
+          </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default Register;
+}

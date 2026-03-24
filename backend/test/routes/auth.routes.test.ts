@@ -145,7 +145,7 @@ describe('Auth Routes', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          emailOrUsername: testUser.email,
+          email: testUser.email,
           password: testUser.password,
         })
         .expect(200);
@@ -161,7 +161,7 @@ describe('Auth Routes', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          emailOrUsername: testUser.username,
+          email: testUser.username,
           password: testUser.password,
         })
         .expect(200);
@@ -174,7 +174,7 @@ describe('Auth Routes', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          emailOrUsername: testUser.email,
+          email: testUser.email,
           password: 'WrongPassword123',
         })
         .expect(401);
@@ -186,7 +186,7 @@ describe('Auth Routes', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          emailOrUsername: 'nonexistent@example.com',
+          email: 'nonexistent@example.com',
           password: 'TestPass123',
         })
         .expect(401);
@@ -203,7 +203,7 @@ describe('Auth Routes', () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
-          emailOrUsername: testUser.email,
+          email: testUser.email,
           password: testUser.password,
         });
       refreshToken = response.body.refreshToken;
@@ -302,7 +302,7 @@ describe('Auth Routes', () => {
       const loginResponse = await request(app)
         .post('/api/auth/login')
         .send({
-          emailOrUsername: testUser.email,
+          email: testUser.email,
           password: newPassword,
         })
         .expect(200);

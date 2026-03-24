@@ -8,7 +8,7 @@ Backend API server for Coding War - An Online Judge Platform
 - **Framework**: Express.js
 - **Language**: TypeScript
 - **Database**: PostgreSQL 15+ with Prisma ORM
-- **Cache/Queue**: Redis
+- **Cache/Queue**: Redis + Bull
 - **Real-time**: Socket.io
 - **Containerization**: Docker
 
@@ -25,352 +25,286 @@ backend/
 │   ├── types/          # TypeScript type definitions
 │   └── index.ts        # Application entry point
 ├── test/               # Test files (mirrors src structure)
-│   ├── middleware/     # Middleware tests
-│   ├── routes/         # Route tests
-│   ├── services/       # Service tests
-│   └── utils/          # Utility tests
 ├── prisma/
 │   ├── schema.prisma   # Database schema
 │   └── migrations/     # Database migrations
-├── judge/              # Judge system Docker configuration
-│   └── Dockerfile      # Judge sandbox image
+├── scripts/
+│   └── docker-entrypoint.sh  # Docker startup script
 ├── .env.example        # Environment variables template
-├── tsconfig.json       # TypeScript configuration
-├── jest.config.js      # Jest test configuration
-├── eslint.config.js    # ESLint configuration
-├── .prettierrc         # Prettier configuration
-└── Dockerfile          # Production image
+├── Dockerfile          # Production image
+└── Dockerfile.dev      # Development image
 ```
 
 ## Getting Started
 
-### Prerequisites
+### Cách 1: Docker (Khuyến nghị) — Chạy tất cả bằng Docker
 
-- Node.js 20+
-- Docker and Docker Compose
-- PostgreSQL 15+ (or use Docker)
-- Redis (or use Docker)
+Chỉ cần 1 lệnh duy nhất từ **thư mục gốc project** (không phải thư mục `backend/`):
 
-### Installation
-
-1. Install dependencies:
 ```bash
+# Từ thư mục gốc coding-war/
+docker-compose up -d --build
+```
+
+Lệnh này sẽ tự động:
+1. Khởi tạo PostgreSQL (port 5432)
+2. Khởi tạo Redis (port 6379)
+3. Build và chạy Backend (port 3000) — bao gồm `prisma generate` + `prisma migrate deploy`
+
+**Kiểm tra trạng thái:**
+
+```bash
+# Xem logs backend
+docker logs coding-war-backend -f
+
+# Xem tất cả containers
+docker ps
+
+# Backend đã sẵn sàng khi thấy log:
+# ✅ Database is ready!
+# 🚀 Starting application...
+# Server running on port 3000
+```
+
+**Các lệnh Docker hữu ích:**
+
+```bash
+# Restart backend (sau khi sửa code)
+docker restart coding-war-backend
+
+# Rebuild backend (sau khi thêm npm package mới)
+docker-compose up -d --build backend
+
+# Stop tất cả
+docker-compose down
+
+# Xóa sạch (bao gồm database data)
+docker-compose down -v
+
+# Chạy Prisma Studio (xem DB qua GUI)
+docker exec -it coding-war-backend npx prisma studio
+
+# Chạy migration mới
+docker exec -it coding-war-backend npx prisma migrate dev
+
+# Check data trong DB
+docker exec -it coding-war-postgres psql -U postgres -d coding_war -c "SELECT id, username, email, role FROM users;"
+```
+
+> **Lưu ý:** Khi dùng Docker, **KHÔNG chạy** `npm run dev` ở local vì sẽ bị lỗi `EADDRINUSE` (port 3000 đã bị container chiếm).
+
+---
+
+### Cách 2: Local Development — Chạy backend trực tiếp
+
+Dùng cách này khi muốn debug hoặc không dùng Docker cho backend.
+
+```bash
+# 1. Chỉ chạy Postgres + Redis bằng Docker (KHÔNG chạy backend container)
+docker-compose up -d postgres redis
+
+# 2. Cài dependencies
+cd backend
 npm install
-```
 
-2. Copy environment variables:
-```bash
+# 3. Copy env
 cp .env.example .env
-```
 
-3. Update `.env` with your configuration
-
-4. Start services with Docker Compose (from project root):
-```bash
-cd ..
-docker-compose up -d
-```
-
-5. Run database migrations:
-```bash
-npm run prisma:migrate
-```
-
-6. Generate Prisma Client:
-```bash
+# 4. Generate Prisma Client
 npm run prisma:generate
-```
 
-### Development
+# 5. Chạy migration (tạo bảng trong DB)
+npm run prisma:migrate
 
-Start the development server with hot reload:
-```bash
+# 6. Chạy dev server
 npm run dev
 ```
 
-The API will be available at `http://localhost:3000`
+Backend sẽ chạy tại `http://localhost:3000`
 
-### Building
+> **Lưu ý:** Khi chạy local, file `.env` phải có `DATABASE_URL=postgresql://postgres:password@localhost:5432/coding_war`. Trong Docker, URL là `postgresql://postgres:password@postgres:5432/coding_war` (host = `postgres`, tên container).
 
-Build the TypeScript project:
+---
+
+## Kiểm tra Database
+
+### Dùng Prisma Studio (GUI)
 ```bash
-npm run build
-```
+# Docker
+docker exec -it coding-war-backend npx prisma studio
 
-Start the production server:
-```bash
-npm start
-```
-
-### Code Quality
-
-Run tests:
-```bash
-npm test
-```
-
-Run tests with coverage:
-```bash
-npm run test:coverage
-```
-
-Run ESLint:
-```bash
-npm run lint
-```
-
-Fix ESLint issues:
-```bash
-npm run lint:fix
-```
-
-Format code with Prettier:
-```bash
-npm run format
-```
-
-### Database
-
-Open Prisma Studio (database GUI):
-```bash
+# Local
 npm run prisma:studio
 ```
+Mở `http://localhost:5555` → xem/sửa data trực tiếp.
 
-## API Documentation
+### Dùng psql (CLI)
+```bash
+# Kết nối vào Postgres container
+docker exec -it coding-war-postgres psql -U postgres -d coding_war
 
-### Implemented Endpoints
+# Một số query hữu ích:
+\dt                                    -- Liệt kê tất cả bảng
+SELECT * FROM users;                   -- Xem users
+SELECT * FROM problems;                -- Xem problems
+SELECT * FROM submissions;             -- Xem submissions
+SELECT * FROM contests;                -- Xem contests
+SELECT COUNT(*) FROM users;            -- Đếm users
+\q                                     -- Thoát
+```
 
-#### Authentication (`/api/auth`)
-- `POST /api/auth/register` - User registration with email verification
-- `POST /api/auth/verify-email` - Email verification
-- `POST /api/auth/login` - User login with JWT
-- `POST /api/auth/refresh` - Refresh access token
-- `POST /api/auth/forgot-password` - Request password reset
-- `POST /api/auth/reset-password` - Reset password with token
+---
 
-#### Problems (`/api/problems`)
-- `GET /api/problems` - List problems with filtering and pagination
-- `GET /api/problems/:id` - Get problem details
-- `POST /api/problems` - Create problem (Admin only)
-- `PUT /api/problems/:id` - Update problem (Admin only)
-- `DELETE /api/problems/:id` - Delete problem (Admin only)
-- `POST /api/problems/:id/test-cases` - Upload test cases (Admin only)
+## API Endpoints
 
-#### Submissions (`/api/submissions`)
-- `POST /api/submissions` - Submit solution
-- `GET /api/submissions/:id` - Get submission details
-- `GET /api/submissions` - List submissions with filtering
-- `POST /api/submissions/:id/rejudge` - Rejudge submission (Admin only)
+### Authentication (`/api/auth`)
+| Method | Endpoint | Mô tả | Auth |
+|--------|----------|--------|------|
+| POST | `/api/auth/register` | Đăng ký tài khoản | Không |
+| POST | `/api/auth/verify-email` | Xác thực email | Không |
+| POST | `/api/auth/login` | Đăng nhập | Không |
+| POST | `/api/auth/refresh` | Làm mới access token | Không |
+| POST | `/api/auth/forgot-password` | Yêu cầu reset password | Không |
+| POST | `/api/auth/reset-password` | Đặt lại password | Không |
 
-#### Contests (`/api/contests`)
-- `GET /api/contests` - List contests with filtering
-- `GET /api/contests/:id` - Get contest details
-- `POST /api/contests` - Create contest (Admin only)
-- `PUT /api/contests/:id` - Update contest (Admin only)
-- `DELETE /api/contests/:id` - Delete contest (Admin only)
-- `POST /api/contests/:id/register` - Register for contest
-- `GET /api/contests/:id/scoreboard` - Get contest scoreboard
+### Problems (`/api/problems`)
+| Method | Endpoint | Mô tả | Auth |
+|--------|----------|--------|------|
+| GET | `/api/problems` | Danh sách problems | Không |
+| GET | `/api/problems/:id` | Chi tiết problem | Không |
+| POST | `/api/problems` | Tạo problem | Admin |
+| PUT | `/api/problems/:id` | Sửa problem | Admin |
+| DELETE | `/api/problems/:id` | Xóa problem | Admin |
+| POST | `/api/problems/:id/test-cases` | Upload test cases | Admin |
 
-#### Users (`/api/users`)
-- `GET /api/users/:id` - Get user profile
-- `PUT /api/users/:id` - Update user profile
-- `GET /api/users/:id/submissions` - Get user submission history
+### Submissions (`/api/submissions`)
+| Method | Endpoint | Mô tả | Auth |
+|--------|----------|--------|------|
+| POST | `/api/submissions` | Nộp bài | User |
+| GET | `/api/submissions/:id` | Chi tiết submission | User |
+| GET | `/api/submissions` | Danh sách submissions | User |
+| POST | `/api/submissions/:id/rejudge` | Chấm lại | Admin |
 
-#### Admin (`/api/admin`)
-- `GET /api/admin/users` - List all users (Admin only)
-- `PUT /api/admin/users/:id/role` - Update user role (Admin only)
-- `GET /api/admin/statistics` - Get system statistics (Admin only)
+### Contests (`/api/contests`)
+| Method | Endpoint | Mô tả | Auth |
+|--------|----------|--------|------|
+| GET | `/api/contests` | Danh sách contests | Không |
+| GET | `/api/contests/:id` | Chi tiết contest | Không |
+| POST | `/api/contests` | Tạo contest | Admin |
+| PUT | `/api/contests/:id` | Sửa contest | Admin |
+| DELETE | `/api/contests/:id` | Xóa contest | Admin |
+| POST | `/api/contests/:id/register` | Đăng ký contest | User |
+| GET | `/api/contests/:id/scoreboard` | Bảng xếp hạng | Không |
 
-#### Health
-- `GET /health` - Basic health check
-- `GET /health/ready` - Readiness check with DB connection
-- `GET /health/live` - Liveness check
+### Users (`/api/users`)
+| Method | Endpoint | Mô tả | Auth |
+|--------|----------|--------|------|
+| GET | `/api/users/:id` | Profile user | Không |
+| PUT | `/api/users/:id` | Sửa profile | User |
+| GET | `/api/users/:id/submissions` | Submissions của user | Không |
 
-### WebSocket Events
+### Admin (`/api/admin`)
+| Method | Endpoint | Mô tả | Auth |
+|--------|----------|--------|------|
+| GET | `/api/admin/users` | Danh sách users | Admin |
+| PUT | `/api/admin/users/:id/role` | Đổi role user | Admin |
+| GET | `/api/admin/statistics` | Thống kê hệ thống | Admin |
 
-#### Submission Status
-- `subscribe:submission` - Subscribe to submission updates
-- `submission:update` - Real-time status updates
-- `submission:complete` - Final verdict notification
+### Health
+| Method | Endpoint | Mô tả |
+|--------|----------|--------|
+| GET | `/health` | Health check |
+| GET | `/health/ready` | Readiness (kiểm tra DB) |
+| GET | `/health/live` | Liveness |
 
-#### Scoreboard
-- `subscribe:scoreboard` - Subscribe to scoreboard updates
-- `scoreboard:update` - Real-time scoreboard changes
+---
 
-Full API documentation will be available at `/api/docs` (Swagger UI - to be implemented)
+## WebSocket Events
+
+### Submission Status
+- `subscribe:submission` — Đăng ký nhận cập nhật submission
+- `submission:update` — Cập nhật trạng thái real-time
+- `submission:complete` — Kết quả cuối cùng
+
+### Scoreboard
+- `subscribe:scoreboard` — Đăng ký nhận cập nhật scoreboard
+- `scoreboard:update` — Cập nhật bảng xếp hạng real-time
+
+---
 
 ## Environment Variables
 
-Key environment variables (see `.env.example` for complete list):
+Xem file `.env.example` để biết đầy đủ. Các biến quan trọng:
 
-### Database
-- `DATABASE_URL`: PostgreSQL connection string
-- `DATABASE_POOL_SIZE`: Connection pool size (default: 10)
+| Biến | Mô tả | Mặc định |
+|------|--------|----------|
+| `PORT` | Port server | `3000` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:password@localhost:5432/coding_war` |
+| `REDIS_HOST` | Redis host | `localhost` |
+| `JWT_SECRET` | Secret key cho JWT | _(bắt buộc)_ |
+| `SMTP_HOST` | SMTP server | `smtp.gmail.com` |
+| `CORS_ORIGIN` | Allowed frontend origin | `http://localhost:5173` |
+| `JUDGE_CONCURRENCY` | Số judge worker song song | `4` |
 
-### Redis
-- `REDIS_HOST`: Redis host (default: localhost)
-- `REDIS_PORT`: Redis port (default: 6379)
-- `REDIS_PASSWORD`: Redis password (optional)
+---
 
-### Authentication
-- `JWT_SECRET`: Secret key for JWT signing (required)
-- `JWT_EXPIRES_IN`: JWT expiration time (default: 7d)
-- `REFRESH_TOKEN_SECRET`: Secret for refresh tokens
-- `REFRESH_TOKEN_EXPIRES_IN`: Refresh token expiration (default: 30d)
+## Troubleshooting
 
-### Email Service
-- `SMTP_HOST`: SMTP server host
-- `SMTP_PORT`: SMTP server port
-- `SMTP_USER`: SMTP username
-- `SMTP_PASS`: SMTP password
-- `EMAIL_FROM`: Sender email address
+### `EADDRINUSE: address already in use :::3000`
+Port 3000 đã bị chiếm. Nguyên nhân: chạy cả Docker container lẫn `npm run dev` cùng lúc.
+```bash
+# Kiểm tra ai đang dùng port 3000
+netstat -aon | findstr :3000
 
-### Application
-- `PORT`: Server port (default: 3000)
-- `NODE_ENV`: Environment (development/production)
-- `CORS_ORIGIN`: Allowed frontend origin
-- `LOG_LEVEL`: Logging level (debug/info/warn/error)
+# Kill process (thay PID bằng số thực tế)
+taskkill /PID <PID> /F
+```
 
-### Judge System
-- `JUDGE_CONCURRENCY`: Number of parallel judge workers (default: 3)
-- `JUDGE_TIMEOUT`: Maximum judging time (default: 30000ms)
+### `@prisma/client did not initialize yet`
+Chưa chạy `prisma generate`.
+```bash
+# Docker
+docker exec -it coding-war-backend npx prisma generate
+docker restart coding-war-backend
 
-## Features
+# Local
+npm run prisma:generate
+```
 
-### Implemented (Tasks 1-26)
+### `Can't reach database server`
+PostgreSQL chưa chạy hoặc sai connection string.
+```bash
+# Kiểm tra container postgres
+docker ps | findstr postgres
 
-#### Phase 1: Foundation ✅
-- ✅ Backend project structure and infrastructure
-- ✅ Database schema with Prisma (User, Problem, Submission, Contest models)
-- ✅ Authentication system (JWT, bcrypt, email verification)
-- ✅ Authorization middleware (RBAC with Admin/User/Guest roles)
-- ✅ Email service integration (NodeMailer + Bull queue)
-- ✅ Core API infrastructure (error handling, validation, rate limiting, logging)
-- ✅ Centralized exception handling with admin alerts
+# Kiểm tra kết nối
+docker exec -it coding-war-postgres psql -U postgres -d coding_war -c "SELECT 1;"
+```
 
-#### Phase 2: Core Features ✅
-- ✅ Problem management service (CRUD operations)
-- ✅ Problem endpoints with filtering and pagination
-- ✅ Test case management (zip upload and validation)
-- ✅ Judge system infrastructure (Bull queue, Docker sandbox)
-- ✅ Judge worker (compilation, execution, verdict calculation)
-- ✅ Submission endpoints
-- ✅ Real-time submission status (WebSocket with Socket.io)
+### Backend container bị restart liên tục
+Xem logs để tìm lỗi:
+```bash
+docker logs coding-war-backend --tail 50
+```
 
-#### Phase 3: Contest System ✅
-- ✅ Contest management service (CRUD, registration, access control)
-- ✅ Contest endpoints
-- ✅ Scoring calculation (IOI and ACM/ICPC rules)
-- ✅ Scoreboard service with freeze time support
-- ✅ Real-time scoreboard updates (WebSocket)
-- ✅ Contest submission support
-
-#### Phase 4: Admin Panel & User Management ✅
-- ✅ User management endpoints
-- ✅ Admin panel endpoints (user management, statistics, rejudge)
-- ✅ Exception handling and logging
-
-### In Progress (Tasks 27-40)
-
-#### Phase 5: Production Readiness 🚧
-- ⏳ Caching strategy (Redis integration)
-- ⏳ Performance optimizations
-- ⏳ Horizontal scaling support
-- ⏳ Comprehensive unit tests
-- ⏳ Integration tests
-- ⏳ End-to-end tests
-- ⏳ Deployment infrastructure
-- ⏳ CI/CD pipeline
-- ⏳ Monitoring and logging
-- ⏳ Security hardening
-- ⏳ API documentation (Swagger)
-
-### Supported Languages
-
-The judge system supports:
-- C (gcc)
-- C++ (g++)
-- Python 3
-- Java (OpenJDK)
-
-### Security Features
-
-- Password hashing with bcrypt (cost factor 12)
-- JWT authentication with 7-day expiration
-- Role-based access control (RBAC)
-- Input validation with Zod schemas
-- XSS prevention through sanitization
-- SQL injection prevention via Prisma ORM
-- Rate limiting (100 req/min general, 10 req/min submissions, 5 req/min login)
-- Docker sandbox isolation for code execution
-- Resource limits enforcement (CPU, memory, network)
-- Centralized exception handling with admin alerts
-
-### Real-time Features
-
-- Submission status updates via WebSocket
-- Live scoreboard updates during contests
-- Automatic reconnection handling
-- Room-based event broadcasting
+---
 
 ## Testing
 
-The backend includes comprehensive test coverage:
-
-### Test Structure
-```
-test/
-├── middleware/     # Middleware tests (6 test files)
-├── routes/         # Route integration tests (7 test files)
-├── services/       # Service unit tests (15 test files)
-└── utils/          # Utility tests (1 test file)
-```
-
-### Running Tests
-
-Run all tests:
 ```bash
-npm test
+npm test                    # Chạy tất cả tests
+npm run test:watch          # Watch mode
+npm run test:coverage       # Coverage report
 ```
 
-Run tests in watch mode:
-```bash
-npm run test:watch
-```
+## Security
 
-Generate coverage report:
-```bash
-npm run test:coverage
-```
-
-### Test Coverage
-
-Current test coverage:
-- **29 test files** with **500+ test cases**
-- Middleware: 100% coverage
-- Routes: 95%+ coverage
-- Services: 90%+ coverage
-- Overall: 85%+ coverage
-
-## Performance
-
-### Response Times
-- API endpoints: < 2 seconds for 95% of requests
-- Judge system: < 30 seconds for most submissions
-- WebSocket latency: < 100ms
-
-### Scalability
-- Supports 1000+ concurrent users
-- Horizontal scaling ready (stateless API design)
-- Distributed queue for judge workers
-- Redis adapter for multi-server WebSocket
-
-### Caching
-- Problem lists: 5 minutes TTL
-- Problem details: 10 minutes TTL
-- Contest lists: 2 minutes TTL
-- Scoreboard: 30 seconds TTL (during contests)
-- User statistics: 5 minutes TTL
+- Password hashing: bcrypt (cost 12)
+- JWT: 7-day access token, 30-day refresh token
+- RBAC: Admin / User / Guest
+- Input validation: Zod schemas
+- Rate limiting: 100 req/min (general), 10/min (submissions), 5/min (login)
+- Docker sandbox cho code execution
 
 ## License
 

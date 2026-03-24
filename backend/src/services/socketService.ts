@@ -20,7 +20,7 @@ export async function initializeSocketServer(httpServer: HttpServer): Promise<So
   // Create Socket.io server
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      origin: (process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:5174').split(',').map(o => o.trim()),
       credentials: true,
     },
     pingTimeout: 60000, // 60 seconds

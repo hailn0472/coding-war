@@ -1,197 +1,177 @@
-import React from 'react';
-import { SearchInput } from '@/components/forms/SearchInput';
-import { Select } from '@/components/ui/Select';
-import { MultiSelect } from '@/components/forms/MultiSelect';
-import { Checkbox } from '@/components/ui/Checkbox';
-import type { ProblemFilters as Filters, Category, ProblemType } from '@/types';
-import { X, Filter } from 'lucide-react';
-import { cn } from '@/utils';
+import { useState, useEffect } from 'react';
+import Input from '../ui/Input';
+import Dropdown, { DropdownItem } from '../ui/Dropdown';
+import Button from '../ui/Button';
+import { ChevronDown, X } from 'lucide-react';
 
-interface ProblemFiltersProps {
-  filters: Filters;
-  onFiltersChange: (filters: Filters) => void;
-  categories: Category[];
-  types: ProblemType[];
-  pointRange: [number, number];
-  className?: string;
+export interface FilterState {
+  difficulty?: 'easy' | 'medium' | 'hard';
+  tags: string[];
+  search: string;
 }
 
-const ProblemFilters: React.FC<ProblemFiltersProps> = ({
-  filters,
+export interface ProblemFiltersProps {
+  filters: FilterState;
+  onFiltersChange: (filters: FilterState) => void;
+  availableTags?: string[];
+}
+
+export default function ProblemFilters({ 
+  filters, 
   onFiltersChange,
-  categories,
-  types,
-  pointRange,
-  className,
-}) => {
-  const updateFilter = (key: keyof Filters, value: any) => {
-    onFiltersChange({
-      ...filters,
-      [key]: value,
-    });
+  availableTags = ['Array', 'String', 'Dynamic Programming', 'Graph', 'Tree', 'Math', 'Greedy', 'Binary Search', 'Sorting', 'Hash Table']
+}: ProblemFiltersProps) {
+  const [searchInput, setSearchInput] = useState(filters.search);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput !== filters.search) {
+        onFiltersChange({ ...filters, search: searchInput });
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const handleDifficultySelect = (difficulty?: 'easy' | 'medium' | 'hard') => {
+    onFiltersChange({ ...filters, difficulty });
   };
 
-  const clearFilters = () => {
-    onFiltersChange({});
+  const handleTagToggle = (tag: string) => {
+    const newTags = filters.tags.includes(tag)
+      ? filters.tags.filter(t => t !== tag)
+      : [...filters.tags, tag];
+    onFiltersChange({ ...filters, tags: newTags });
   };
 
-  const hasActiveFilters = Object.keys(filters).some(key => {
-    const value = filters[key as keyof Filters];
-    return (
-      value !== undefined &&
-      value !== '' &&
-      (Array.isArray(value) ? value.length > 0 : true)
-    );
-  });
+  const handleClearFilters = () => {
+    setSearchInput('');
+    onFiltersChange({ difficulty: undefined, tags: [], search: '' });
+  };
 
-  const categoryOptions = categories.map(cat => ({
-    value: cat.id,
-    label: `${cat.name} (${cat.problemCount})`,
-  }));
-
-  const typeOptions = types.map(type => ({
-    value: type.id,
-    label: type.name,
-  }));
-
-  const difficultyOptions = [
-    { value: 'Easy', label: 'Easy' },
-    { value: 'Medium', label: 'Medium' },
-    { value: 'Hard', label: 'Hard' },
-  ];
+  const hasActiveFilters = filters.difficulty || filters.tags.length > 0 || filters.search;
 
   return (
-    <div className={cn('bg-card space-y-6 rounded-lg border p-6', className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Filter className="text-muted-foreground h-5 w-5" />
-          <h3 className="text-lg font-semibold">Filters</h3>
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6">
+      <div className="flex flex-col md:flex-row gap-4">
+        {/* Search Input */}
+        <div className="flex-1">
+          <Input
+            type="text"
+            placeholder="Search problems by title or description..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            className="w-full"
+          />
         </div>
-        {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="text-muted-foreground hover:text-foreground flex items-center space-x-1 text-sm transition-colors"
+
+        {/* Difficulty Filter */}
+        <div className="w-full md:w-48">
+          <Dropdown
+            trigger={
+              <Button variant="secondary" className="w-full justify-between">
+                <span>
+                  {filters.difficulty 
+                    ? filters.difficulty.charAt(0).toUpperCase() + filters.difficulty.slice(1)
+                    : 'All Difficulties'}
+                </span>
+                <ChevronDown className="w-4 h-4 ml-2" />
+              </Button>
+            }
+            align="left"
           >
-            <X className="h-4 w-4" />
-            <span>Clear All</span>
-          </button>
+            <DropdownItem onClick={() => handleDifficultySelect(undefined)}>
+              All Difficulties
+            </DropdownItem>
+            <DropdownItem onClick={() => handleDifficultySelect('easy')}>
+              Easy
+            </DropdownItem>
+            <DropdownItem onClick={() => handleDifficultySelect('medium')}>
+              Medium
+            </DropdownItem>
+            <DropdownItem onClick={() => handleDifficultySelect('hard')}>
+              Hard
+            </DropdownItem>
+          </Dropdown>
+        </div>
+
+        {/* Tags Filter */}
+        <div className="w-full md:w-48">
+          <Dropdown
+            trigger={
+              <Button variant="secondary" className="w-full justify-between">
+                <span>
+                  {filters.tags.length > 0 
+                    ? `${filters.tags.length} Tag${filters.tags.length > 1 ? 's' : ''}`
+                    : 'All Tags'}
+                </span>
+                <ChevronDown className="w-4 h-4 ml-2" />
+              </Button>
+            }
+            align="left"
+          >
+            <div className="max-h-64 overflow-y-auto">
+              {availableTags.map((tag) => (
+                <DropdownItem key={tag} onClick={() => handleTagToggle(tag)}>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={filters.tags.includes(tag)}
+                      onChange={() => {}}
+                      className="mr-2"
+                    />
+                    {tag}
+                  </div>
+                </DropdownItem>
+              ))}
+            </div>
+          </Dropdown>
+        </div>
+
+        {/* Clear Filters Button */}
+        {hasActiveFilters && (
+          <Button
+            variant="ghost"
+            onClick={handleClearFilters}
+            className="w-full md:w-auto"
+          >
+            <X className="w-4 h-4 mr-2" />
+            Clear
+          </Button>
         )}
       </div>
 
-      {/* Search */}
-      <div>
-        <SearchInput
-          value={filters.search || ''}
-          onChange={value => updateFilter('search', value)}
-          placeholder="Search problems..."
-          className="w-full"
-        />
-      </div>
-
-      {/* Category */}
-      <div>
-        <label className="mb-2 block text-sm font-medium">Category</label>
-        <Select
-          value={filters.category || 'all'}
-          onChange={e =>
-            updateFilter(
-              'category',
-              e.target.value === 'all' ? undefined : e.target.value
-            )
-          }
-          options={categoryOptions}
-          placeholder="Select category"
-        />
-      </div>
-
-      {/* Difficulty */}
-      <div>
-        <label className="mb-2 block text-sm font-medium">Difficulty</label>
-        <Select
-          value={filters.difficulty || ''}
-          onChange={e =>
-            updateFilter('difficulty', e.target.value || undefined)
-          }
-          options={[
-            { value: '', label: 'All Difficulties' },
-            ...difficultyOptions,
-          ]}
-          placeholder="Select difficulty"
-        />
-      </div>
-
-      {/* Types */}
-      <div>
-        <label className="mb-2 block text-sm font-medium">Problem Types</label>
-        <MultiSelect
-          options={typeOptions}
-          value={filters.types || []}
-          onChange={value =>
-            updateFilter('types', value.length > 0 ? value : undefined)
-          }
-          placeholder="Select types..."
-        />
-      </div>
-
-      {/* Point Range */}
-      <div>
-        <label className="mb-2 block text-sm font-medium">Point Range</label>
-        <div className="flex items-center space-x-2">
-          <input
-            type="number"
-            min={pointRange[0]}
-            max={pointRange[1]}
-            value={filters.pointRange?.[0] || pointRange[0]}
-            onChange={e => {
-              const min = parseInt(e.target.value);
-              const max = filters.pointRange?.[1] || pointRange[1];
-              updateFilter('pointRange', [min, max]);
-            }}
-            className="input w-20"
-            placeholder="Min"
-          />
-          <span className="text-muted-foreground">to</span>
-          <input
-            type="number"
-            min={pointRange[0]}
-            max={pointRange[1]}
-            value={filters.pointRange?.[1] || pointRange[1]}
-            onChange={e => {
-              const max = parseInt(e.target.value);
-              const min = filters.pointRange?.[0] || pointRange[0];
-              updateFilter('pointRange', [min, max]);
-            }}
-            className="input w-20"
-            placeholder="Max"
-          />
+      {/* Active Filters Display */}
+      {(filters.difficulty || filters.tags.length > 0) && (
+        <div className="flex flex-wrap gap-2 mt-4">
+          {filters.difficulty && (
+            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+              Difficulty: {filters.difficulty.charAt(0).toUpperCase() + filters.difficulty.slice(1)}
+              <button
+                onClick={() => handleDifficultySelect(undefined)}
+                className="ml-2 hover:text-blue-600"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          )}
+          {filters.tags.map((tag) => (
+            <span
+              key={tag}
+              className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+            >
+              {tag}
+              <button
+                onClick={() => handleTagToggle(tag)}
+                className="ml-2 hover:text-gray-600"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
         </div>
-      </div>
-
-      {/* Boolean Filters */}
-      <div className="space-y-3">
-        <Checkbox
-          label="Show only solved problems"
-          checked={filters.showSolved || false}
-          onChange={checked => updateFilter('showSolved', checked || undefined)}
-        />
-
-        <Checkbox
-          label="Hide solved problems"
-          checked={filters.hideSolved || false}
-          onChange={checked => updateFilter('hideSolved', checked || undefined)}
-        />
-
-        <Checkbox
-          label="Has editorial"
-          checked={filters.hasEditorial || false}
-          onChange={checked =>
-            updateFilter('hasEditorial', checked || undefined)
-          }
-        />
-      </div>
+      )}
     </div>
   );
-};
-
-export default ProblemFilters;
+}

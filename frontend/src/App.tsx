@@ -1,89 +1,106 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import { ThemeProvider } from './components/theme/ThemeProvider';
-import { ToastProvider } from './contexts/ToastContext';
-import { WebSocketProvider } from './providers/WebSocketProvider';
-import Layout from './components/layout/Layout';
-import Home from './pages/Home';
-import ProblemList from './pages/Problems/ProblemList';
-import ContestList from './pages/Contests/ContestList';
-import UserList from './pages/Users/UserList';
-import UserProfile from './pages/Users/UserProfile';
-import Login from './pages/Auth/Login';
-import Register from './pages/Auth/Register';
-import NotFound from './pages/NotFound';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
-import './App.css';
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      gcTime: 10 * 60 * 1000, // 10 minutes (replaces cacheTime)
-    },
-  },
-});
+import { Link } from 'react-router-dom'
+import { useAuthStore } from './stores/authStore'
 
 function App() {
+  const { isAuthenticated, user } = useAuthStore()
+
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="system">
-        <ToastProvider position="top-right" maxToasts={5}>
-          <WebSocketProvider url="ws://localhost:8080/ws">
-            <Router>
-              <div className="App">
-                <Routes>
-                  {/* Public auth routes */}
-                  <Route path="/login" element={<Login />} />
-                  <Route path="/register" element={<Register />} />
+    <div className="content">
+      <div className="home-layout">
+        {/* Main content */}
+        <div>
+          <div className="home-welcome">
+            <h1>Welcome to Coding War</h1>
+            <p>An online judge for competitive programming practice and contests.</p>
+          </div>
 
-                  {/* Main app routes with layout */}
-                  <Route path="/" element={<Layout />}>
-                    <Route index element={<Home />} />
-
-                    {/* Problems */}
-                    <Route path="problems" element={<ProblemList />} />
-
-                    {/* Contests */}
-                    <Route path="contests" element={<ContestList />} />
-
-                    {/* Users */}
-                    <Route path="users" element={<UserList />} />
-                    <Route path="users/:username" element={<UserProfile />} />
-
-                    {/* Protected routes */}
-                    <Route
-                      path="profile/edit"
-                      element={
-                        <ProtectedRoute>
-                          <div className="p-8">Edit Profile - Coming Soon</div>
-                        </ProtectedRoute>
-                      }
-                    />
-                    <Route
-                      path="admin/*"
-                      element={
-                        <ProtectedRoute requireAdmin>
-                          <div className="p-8">Admin Panel - Coming Soon</div>
-                        </ProtectedRoute>
-                      }
-                    />
-
-                    {/* 404 */}
-                    <Route path="*" element={<NotFound />} />
-                  </Route>
-                </Routes>
+          {isAuthenticated && user && (
+            <div className="panel">
+              <div className="panel-header">👋 Hi, {user.username}</div>
+              <div className="panel-body">
+                <p style={{ marginBottom: 10 }}>Ready to solve some problems?</p>
+                <Link to="/problems" className="btn btn-primary btn-sm" style={{ marginRight: 8 }}>Browse Problems</Link>
+                <Link to="/contests" className="btn btn-sm">View Contests</Link>
               </div>
+            </div>
+          )}
 
-              {/* React Query Devtools */}
-              <ReactQueryDevtools initialIsOpen={false} />
-            </Router>
-          </WebSocketProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
-  );
+          <div className="panel">
+            <div className="panel-header">📢 Announcements</div>
+            <div className="panel-body">
+              <div className="news-item">
+                <h4><a href="#">Platform Launch</a></h4>
+                <div className="date">March 2026</div>
+                <p style={{ fontSize: 13, color: '#666', marginTop: 2 }}>Coding War is now live! Start by solving practice problems or join an upcoming contest.</p>
+              </div>
+              <div className="news-item">
+                <h4><a href="#">Judge System Ready</a></h4>
+                <div className="date">March 2026</div>
+                <p style={{ fontSize: 13, color: '#666', marginTop: 2 }}>Support for C, C++, Python, and Java with Docker-based sandboxing.</p>
+              </div>
+            </div>
+          </div>
+
+          {!isAuthenticated && (
+            <div className="panel">
+              <div className="panel-header">🚀 Getting Started</div>
+              <div className="panel-body">
+                <p style={{ fontSize: 13 }}>
+                  <Link to="/register">Create an account</Link> to start submitting solutions and tracking your progress.
+                  Already have an account? <Link to="/login">Log in</Link>.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="sidebar">
+          <div className="panel">
+            <div className="panel-header">Quick Links</div>
+            <div className="panel-body quick-links">
+              <Link to="/problems">📋 Problem List</Link>
+              <Link to="/contests">🏆 Contests</Link>
+              {isAuthenticated && <Link to="/submissions">📝 My Submissions</Link>}
+              {user?.role === 'ADMIN' && <Link to="/admin">⚙️ Admin Panel</Link>}
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">Platform Stats</div>
+            <div className="panel-body" style={{ fontSize: 13 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #eee' }}>
+                <span>Problems</span>
+                <strong>500+</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #eee' }}>
+                <span>Languages</span>
+                <strong>4</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #eee' }}>
+                <span>Scoring</span>
+                <strong>IOI / ACM</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                <span>Judge</span>
+                <strong>Real-time</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="panel-header">Supported Languages</div>
+            <div className="panel-body" style={{ fontSize: 13 }}>
+              <div>• C (GCC)</div>
+              <div>• C++ (G++)</div>
+              <div>• Python 3</div>
+              <div>• Java (OpenJDK)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
 
-export default App;
+export default App

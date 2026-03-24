@@ -29,8 +29,20 @@ build: ## Build both frontend and backend for production
 start: ## Start all services with Docker Compose
 	docker-compose up -d
 
+restart: ## Restart all services
+	docker-compose restart
+
 stop: ## Stop all services
 	docker-compose down
+
+setup: ## First-time setup: start services and run migrations
+	docker-compose up -d
+	@echo "⏳ Waiting for services to be ready..."
+	@sleep 10
+	@echo "🔄 Running database migrations..."
+	cd backend && npm run prisma:migrate
+	cd backend && npm run prisma:generate
+	@echo "✅ Setup complete!"
 
 clean: ## Stop services and remove volumes
 	docker-compose down -v
