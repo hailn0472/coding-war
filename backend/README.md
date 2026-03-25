@@ -1,6 +1,6 @@
 # Coding War Backend API
 
-Backend API server for Coding War - An Online Judge Platform
+Backend API server for Coding War — An Online Judge Platform
 
 ## Tech Stack
 
@@ -10,29 +10,74 @@ Backend API server for Coding War - An Online Judge Platform
 - **Database**: PostgreSQL 15+ with Prisma ORM
 - **Cache/Queue**: Redis + Bull
 - **Real-time**: Socket.io
-- **Containerization**: Docker
+- **Object Storage**: S3-compatible (MinIO for dev, AWS S3 for prod)
+- **Containerization**: Docker (app + judge sandbox)
 
 ## Project Structure
 
 ```
 backend/
 ├── src/
-│   ├── routes/         # API route handlers
-│   ├── services/       # Business logic services
-│   ├── middleware/     # Express middleware
-│   ├── models/         # Data models and types
-│   ├── utils/          # Utility functions
-│   ├── types/          # TypeScript type definitions
-│   └── index.ts        # Application entry point
-├── test/               # Test files (mirrors src structure)
+│   ├── routes/              # API route handlers
+│   │   ├── index.ts         # Route aggregator
+│   │   ├── auth.routes.ts
+│   │   ├── problem.routes.ts
+│   │   ├── submission.routes.ts
+│   │   ├── contest.routes.ts
+│   │   ├── user.routes.ts
+│   │   └── admin.routes.ts
+│   ├── services/            # Business logic services
+│   │   ├── authService.ts
+│   │   ├── adminService.ts
+│   │   ├── problemService.ts
+│   │   ├── submissionService.ts
+│   │   ├── contestService.ts
+│   │   ├── userService.ts
+│   │   ├── judgeService.ts          # Judge orchestration
+│   │   ├── compilationService.ts    # Code compilation
+│   │   ├── executionService.ts      # Sandboxed execution
+│   │   ├── dockerSandbox.ts         # Docker sandbox mgmt
+│   │   ├── scoringService.ts        # IOI/ACM scoring
+│   │   ├── scoreboardService.ts     # Scoreboard logic
+│   │   ├── s3Service.ts             # S3 object storage
+│   │   ├── testCaseService.ts       # Test case I/O
+│   │   ├── emailService.ts          # Transactional email
+│   │   ├── emailQueue.ts            # Email queue (Bull)
+│   │   ├── submissionQueue.ts       # Submission queue (Bull)
+│   │   ├── socketService.ts         # Socket.io core
+│   │   ├── submissionSocketService.ts
+│   │   └── scoreboardSocketService.ts
+│   ├── middleware/           # Express middleware
+│   │   ├── auth.ts           # JWT authentication
+│   │   ├── authorize.ts      # RBAC authorization
+│   │   ├── errorHandler.ts   # Global error handler
+│   │   ├── rateLimit.ts      # Rate limiting
+│   │   ├── requestId.ts      # Request ID injection
+│   │   ├── requestLogger.ts  # HTTP request logging
+│   │   └── validation.ts     # Zod schema validation
+│   ├── utils/                # Utility functions
+│   │   ├── checksumUtils.ts  # SHA-256 integrity checks
+│   │   ├── env.ts            # Env validation (Zod)
+│   │   ├── exceptionHandler.ts
+│   │   ├── logger.ts         # Winston logger
+│   │   ├── prisma.ts         # Prisma client singleton
+│   │   └── schemas.ts        # Shared Zod schemas
+│   ├── types/                # TypeScript type definitions
+│   └── index.ts              # Application entry point
+├── test/                     # Test files (mirrors src structure)
 ├── prisma/
-│   ├── schema.prisma   # Database schema
-│   └── migrations/     # Database migrations
+│   ├── schema.prisma         # Database schema
+│   ├── seed.js               # Database seeder
+│   └── migrations/           # Database migrations
 ├── scripts/
-│   └── docker-entrypoint.sh  # Docker startup script
-├── .env.example        # Environment variables template
-├── Dockerfile          # Production image
-└── Dockerfile.dev      # Development image
+│   ├── docker-entrypoint.sh  # Docker startup script
+│   ├── verify-setup.sh       # Setup verification
+│   └── check-users.ts        # User check utility
+├── .env.example              # Environment variables template
+├── Dockerfile                # Production image
+├── Dockerfile.dev            # Development image
+├── Dockerfile.judge          # Judge sandbox image (Ubuntu + compilers)
+└── seccomp-profile.json      # Seccomp security profile for sandbox
 ```
 
 ## Getting Started
@@ -49,7 +94,9 @@ docker-compose up -d --build
 Lệnh này sẽ tự động:
 1. Khởi tạo PostgreSQL (port 5432)
 2. Khởi tạo Redis (port 6379)
-3. Build và chạy Backend (port 3000) — bao gồm `prisma generate` + `prisma migrate deploy`
+3. Khởi tạo MinIO (port 9000/9001) — S3-compatible object storage
+4. Build judge sandbox image
+5. Build và chạy Backend (port 3000) — bao gồm `prisma generate` + `prisma migrate deploy`
 
 **Kiểm tra trạng thái:**
 
@@ -100,8 +147,8 @@ docker exec -it coding-war-postgres psql -U postgres -d coding_war -c "SELECT id
 Dùng cách này khi muốn debug hoặc không dùng Docker cho backend.
 
 ```bash
-# 1. Chỉ chạy Postgres + Redis bằng Docker (KHÔNG chạy backend container)
-docker-compose up -d postgres redis
+# 1. Chỉ chạy Postgres + Redis + MinIO bằng Docker (KHÔNG chạy backend container)
+docker-compose up -d postgres redis minio
 
 # 2. Cài dependencies
 cd backend
@@ -175,7 +222,7 @@ SELECT COUNT(*) FROM users;            -- Đếm users
 | POST | `/api/problems` | Tạo problem | Admin |
 | PUT | `/api/problems/:id` | Sửa problem | Admin |
 | DELETE | `/api/problems/:id` | Xóa problem | Admin |
-| POST | `/api/problems/:id/test-cases` | Upload test cases | Admin |
+| POST | `/api/problems/:id/test-cases` | Upload test cases (ZIP → S3) | Admin |
 
 ### Submissions (`/api/submissions`)
 | Method | Endpoint | Mô tả | Auth |
@@ -183,7 +230,6 @@ SELECT COUNT(*) FROM users;            -- Đếm users
 | POST | `/api/submissions` | Nộp bài | User |
 | GET | `/api/submissions/:id` | Chi tiết submission | User |
 | GET | `/api/submissions` | Danh sách submissions | User |
-| POST | `/api/submissions/:id/rejudge` | Chấm lại | Admin |
 
 ### Contests (`/api/contests`)
 | Method | Endpoint | Mô tả | Auth |
@@ -208,14 +254,13 @@ SELECT COUNT(*) FROM users;            -- Đếm users
 |--------|----------|--------|------|
 | GET | `/api/admin/users` | Danh sách users | Admin |
 | PUT | `/api/admin/users/:id/role` | Đổi role user | Admin |
-| GET | `/api/admin/statistics` | Thống kê hệ thống | Admin |
+| GET | `/api/admin/statistics` | Thống kê hệ thống (cached 5 phút) | Admin |
+| POST | `/api/admin/submissions/:id/rejudge` | Chấm lại submission | Admin |
 
 ### Health
 | Method | Endpoint | Mô tả |
 |--------|----------|--------|
 | GET | `/health` | Health check |
-| GET | `/health/ready` | Readiness (kiểm tra DB) |
-| GET | `/health/live` | Liveness |
 
 ---
 
@@ -238,13 +283,58 @@ Xem file `.env.example` để biết đầy đủ. Các biến quan trọng:
 
 | Biến | Mô tả | Mặc định |
 |------|--------|----------|
+| `NODE_ENV` | Môi trường | `development` |
 | `PORT` | Port server | `3000` |
+| `API_BASE_URL` | Base URL của API | `http://localhost:3000` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://postgres:password@localhost:5432/coding_war` |
 | `REDIS_HOST` | Redis host | `localhost` |
-| `JWT_SECRET` | Secret key cho JWT | _(bắt buộc)_ |
+| `REDIS_PORT` | Redis port | `6379` |
+| `JWT_SECRET` | Secret key cho JWT (min 32 chars) | _(bắt buộc)_ |
+| `JWT_EXPIRES_IN` | Thời hạn access token | `7d` |
+| `JWT_REFRESH_SECRET` | Secret key cho refresh token | _(tùy chọn)_ |
+| `JWT_REFRESH_EXPIRES_IN` | Thời hạn refresh token | `30d` |
 | `SMTP_HOST` | SMTP server | `smtp.gmail.com` |
-| `CORS_ORIGIN` | Allowed frontend origin | `http://localhost:5173` |
+| `SMTP_PORT` | SMTP port | `587` |
+| `SMTP_USER` | SMTP username | _(tùy chọn)_ |
+| `SMTP_PASSWORD` | SMTP password | _(tùy chọn)_ |
+| `EMAIL_FROM` | Địa chỉ gửi email | `noreply@codingwar.com` |
+| `FRONTEND_URL` | URL frontend (cho email links) | _(tùy chọn)_ |
+| `CORS_ORIGIN` | Allowed frontend origins (comma-separated) | `http://localhost:5173` |
+| `LOG_LEVEL` | Mức log | `info` |
 | `JUDGE_CONCURRENCY` | Số judge worker song song | `4` |
+| `JUDGE_TIMEOUT` | Timeout cho mỗi test case (ms) | `30000` |
+| `SANDBOX_MEMORY_LIMIT` | Giới hạn memory sandbox (MB) | `512` |
+| `RATE_LIMIT_WINDOW_MS` | Cửa sổ rate limit (ms) | `60000` |
+| `RATE_LIMIT_MAX_REQUESTS` | Max requests / window | `100` |
+| `RATE_LIMIT_SUBMISSION_MAX` | Max submissions / window | `10` |
+| `RATE_LIMIT_LOGIN_MAX` | Max login attempts / window | `5` |
+| `S3_ENDPOINT` | S3 endpoint (MinIO) | `http://localhost:9000` |
+| `S3_REGION` | S3 region | `us-east-1` |
+| `S3_ACCESS_KEY_ID` | S3 access key | `minioadmin` |
+| `S3_SECRET_ACCESS_KEY` | S3 secret key | `minioadmin` |
+| `S3_BUCKET_NAME` | S3 bucket name | `coding-war-testcases` |
+| `S3_PRESIGNED_URL_EXPIRY` | Presigned URL expiry (seconds) | `300` |
+
+---
+
+## Database Schema
+
+Các bảng chính trong database:
+
+| Model | Mô tả |
+|-------|--------|
+| `User` | Tài khoản người dùng (username, email, role) |
+| `Problem` | Bài tập (title, description, difficulty, time/memory limits) |
+| `TestCase` | Test cases — lưu S3 object keys + SHA-256 checksums |
+| `Submission` | Bài nộp (source code, status, verdict) |
+| `TestCaseResult` | Kết quả từng test case cho mỗi submission |
+| `Contest` | Cuộc thi (IOI/ACM scoring, freeze time) |
+| `ContestProblem` | Map problem ↔ contest (order, points) |
+| `ContestParticipant` | Đăng ký tham gia contest |
+
+**Supported Languages:** C, C++, Python, Java
+
+**Scoring Rules:** IOI, ACM
 
 ---
 
@@ -287,6 +377,16 @@ Xem logs để tìm lỗi:
 docker logs coding-war-backend --tail 50
 ```
 
+### S3/MinIO connection error
+MinIO chưa chạy hoặc sai credentials.
+```bash
+# Kiểm tra MinIO container
+docker ps | findstr minio
+
+# Truy cập MinIO Console
+# http://localhost:9001 (user: minioadmin / pass: minioadmin)
+```
+
 ---
 
 ## Testing
@@ -299,12 +399,17 @@ npm run test:coverage       # Coverage report
 
 ## Security
 
-- Password hashing: bcrypt (cost 12)
-- JWT: 7-day access token, 30-day refresh token
-- RBAC: Admin / User / Guest
-- Input validation: Zod schemas
-- Rate limiting: 100 req/min (general), 10/min (submissions), 5/min (login)
-- Docker sandbox cho code execution
+- **Password hashing**: Argon2 (primary) + bcrypt (fallback, cost 12)
+- **JWT**: 7-day access token, 30-day refresh token
+- **RBAC**: Admin / User / Guest
+- **Input validation**: Zod schemas on all endpoints
+- **Rate limiting**: 100 req/min (general), 10/min (submissions), 5/min (login)
+- **Docker sandbox**: Isolated code execution with seccomp profile
+- **Test case integrity**: SHA-256 checksums for input/output files
+- **S3 Presigned URLs**: Time-limited access to test case files (default 5 min)
+- **Security headers**: Helmet.js middleware
+- **CORS**: Configurable allowed origins
+- **Request compression**: gzip via compression middleware
 
 ## License
 
