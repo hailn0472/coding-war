@@ -40,20 +40,24 @@ describe('Judge Service', () => {
     });
     testProblemId = problem.id;
 
-    // Create test cases
+    // Create test cases (S3 keys + SHA-256 checksums)
     await prisma.testCase.createMany({
       data: [
         {
           problemId: testProblemId,
-          inputFile: '5 3',
-          outputFile: '8',
+          inputFile: `testcases/${testProblemId}/0.in`,
+          outputFile: `testcases/${testProblemId}/0.out`,
+          inputChecksum: 'a3a2e5b668157da3e4309bab39eabb4902c86562e2b0e66b705ea920a2f9924e', // SHA-256 of '5 3'
+          outputChecksum: '2c624232cdd221771294dfbb310aca000a0df6ac8b166e8b32c4bde471f07cbc', // SHA-256 of '8'
           isHidden: false,
           orderIndex: 0,
         },
         {
           problemId: testProblemId,
-          inputFile: '10 20',
-          outputFile: '30',
+          inputFile: `testcases/${testProblemId}/1.in`,
+          outputFile: `testcases/${testProblemId}/1.out`,
+          inputChecksum: '64e604787cbf194841e7b68d7cd28786f6c9a0a3ab9f8b0a0e87cb4387ab0107', // SHA-256 of '10 20'
+          outputChecksum: '624b60c58c9d8bfb6ff1886c2fd605d2adeb6ea4da576068201b6c6958ce93f4', // SHA-256 of '30'
           isHidden: false,
           orderIndex: 1,
         },

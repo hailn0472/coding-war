@@ -2,11 +2,17 @@ import AdmZip from 'adm-zip';
 import prisma from '../utils/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { computeSHA256 } from '../utils/checksumUtils';
+import {
+  uploadTestCaseFile,
+  deleteTestCaseFiles,
+  getTestCaseS3Key,
+} from './s3Service';
 
 /**
  * Test Case Service
- * Handles test case upload and management
- * Requirements: REQ-5.3, REQ-5.4
+ * Handles test case upload and management with S3 storage and SHA-256 integrity
+ * Requirements: REQ-5.3, REQ-5.4, SDD 3.2.4 (Verify SHA-256), SDD 4.2 (D4 - S3)
  */
 
 interface TestCaseFile {
@@ -101,6 +107,7 @@ export function extractTestCasesFromZip(zipBuffer: Buffer): TestCaseFile[] {
 
 /**
  * Upload test cases for a problem
+ * Stores files in S3 and metadata (S3 keys + SHA-256 checksums) in database
  * @param problemId - Problem ID
  * @param zipBuffer - Buffer containing the zip file
  * @param sampleCount - Number of test cases to mark as non-hidden (samples)
@@ -123,18 +130,37 @@ export async function uploadTestCases(
   // Extract test cases from zip
   const testCases = extractTestCasesFromZip(zipBuffer);
   
-  // Delete existing test cases for this problem
+  // Delete existing test cases from DB and S3
   await prisma.testCase.deleteMany({
     where: { problemId },
   });
+  await deleteTestCaseFiles(problemId);
   
-  // Create new test cases
-  const createPromises = testCases.map((tc, index) => {
+  // Upload to S3 and create DB records with checksums
+  const createPromises = testCases.map(async (tc, index) => {
+    const inputBuffer = Buffer.from(tc.input, 'utf8');
+    const outputBuffer = Buffer.from(tc.output, 'utf8');
+    
+    // Compute SHA-256 checksums
+    const inputChecksum = computeSHA256(inputBuffer);
+    const outputChecksum = computeSHA256(outputBuffer);
+    
+    // Generate S3 keys
+    const inputKey = getTestCaseS3Key(problemId, tc.orderIndex, 'in');
+    const outputKey = getTestCaseS3Key(problemId, tc.orderIndex, 'out');
+    
+    // Upload files to S3
+    await uploadTestCaseFile(inputKey, inputBuffer);
+    await uploadTestCaseFile(outputKey, outputBuffer);
+    
+    // Store S3 keys and checksums in database
     return prisma.testCase.create({
       data: {
         problemId,
-        inputFile: tc.input,
-        outputFile: tc.output,
+        inputFile: inputKey,
+        outputFile: outputKey,
+        inputChecksum,
+        outputChecksum,
         isHidden: index >= sampleCount, // First sampleCount test cases are visible
         orderIndex: tc.orderIndex,
       },
@@ -147,6 +173,7 @@ export async function uploadTestCases(
     problemId,
     count: testCases.length,
     sampleCount,
+    storage: 'S3',
   });
   
   return testCases.length;
@@ -156,7 +183,7 @@ export async function uploadTestCases(
  * Get test cases for a problem
  * @param problemId - Problem ID
  * @param includeHidden - Whether to include hidden test cases
- * @returns Array of test cases
+ * @returns Array of test cases (metadata only — S3 keys and checksums)
  */
 export async function getTestCases(problemId: string, includeHidden: boolean = false) {
   const where: any = { problemId };

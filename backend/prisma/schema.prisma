@@ -71,14 +71,16 @@ enum Visibility {
 }
 
 model TestCase {
-  id          String   @id @default(uuid())
-  problemId   String
-  problem     Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
-  inputFile   String   @db.Text  // S3 path or file content
-  outputFile  String   @db.Text  // S3 path or file content
-  isHidden    Boolean  @default(true)  // Hidden from users
-  orderIndex  Int
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  problemId      String
+  problem        Problem  @relation(fields: [problemId], references: [id], onDelete: Cascade)
+  inputFile      String   @db.Text  // S3 object key for input file
+  outputFile     String   @db.Text  // S3 object key for output file
+  inputChecksum  String   // SHA-256 hex digest of input file
+  outputChecksum String   // SHA-256 hex digest of output file
+  isHidden       Boolean  @default(true)  // Hidden from users
+  orderIndex     Int
+  createdAt      DateTime @default(now())
   
   testCaseResults TestCaseResult[]
   

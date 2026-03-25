@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll } from '@jest/globals';
 import {
   hashPassword,
   verifyPassword,
+  needsRehash,
   generateAccessToken,
   generateRefreshToken,
   verifyToken,
@@ -9,6 +10,7 @@ import {
   generateEmailVerificationToken,
   generatePasswordResetToken,
 } from '../../src/../src/services/authService';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
 describe('Authentication Service', () => {
@@ -59,6 +61,40 @@ describe('Authentication Service', () => {
       const isValid = await verifyPassword(password, hash);
       
       expect(isValid).toBe(true);
+    });
+
+    it('should produce Argon2id hashes (not bcrypt)', async () => {
+      const password = 'TestPassword123!';
+      const hash = await hashPassword(password);
+      
+      // Argon2id hashes start with $argon2id$
+      expect(hash).toMatch(/^\$argon2id\$/);
+    });
+
+    it('should verify bcrypt-hashed password (backward compatibility)', async () => {
+      const password = 'LegacyPassword123!';
+      const bcryptHash = await bcrypt.hash(password, 12);
+      const isValid = await verifyPassword(password, bcryptHash);
+      
+      expect(isValid).toBe(true);
+    });
+
+    it('should reject wrong password against bcrypt hash', async () => {
+      const password = 'LegacyPassword123!';
+      const bcryptHash = await bcrypt.hash(password, 12);
+      const isValid = await verifyPassword('WrongPassword456!', bcryptHash);
+      
+      expect(isValid).toBe(false);
+    });
+
+    it('should correctly identify bcrypt hashes as needing rehash', async () => {
+      const bcryptHash = await bcrypt.hash('test', 12);
+      expect(needsRehash(bcryptHash)).toBe(true);
+    });
+
+    it('should correctly identify argon2id hashes as not needing rehash', async () => {
+      const argon2Hash = await hashPassword('test');
+      expect(needsRehash(argon2Hash)).toBe(false);
     });
   });
 

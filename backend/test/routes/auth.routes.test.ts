@@ -209,13 +209,16 @@ describe('Auth Routes', () => {
       refreshToken = response.body.refreshToken;
     });
 
-    it('should refresh access token with valid refresh token', async () => {
+    it('should refresh access token and rotate refresh token', async () => {
       const response = await request(app)
         .post('/api/auth/refresh')
         .send({ refreshToken })
         .expect(200);
 
       expect(response.body).toHaveProperty('accessToken');
+      expect(response.body).toHaveProperty('refreshToken');
+      // New refresh token should be different from the one sent
+      expect(response.body.refreshToken).not.toBe(refreshToken);
     });
 
     it('should reject invalid refresh token', async () => {

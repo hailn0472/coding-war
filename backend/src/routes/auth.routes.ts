@@ -5,6 +5,7 @@ import { AppError } from '../middleware/errorHandler';
 import {
   hashPassword,
   verifyPassword,
+  needsRehash,
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
@@ -233,6 +234,15 @@ router.post(
       const accessToken = generateAccessToken(user.id, user.role);
       const refreshToken = generateRefreshToken(user.id);
 
+      // Transparent password re-hash: migrate legacy bcrypt hashes to Argon2id
+      if (needsRehash(user.passwordHash)) {
+        const newHash = await hashPassword(password);
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { passwordHash: newHash },
+        });
+      }
+
       // Return tokens and user object
       res.json({
         accessToken,
@@ -289,9 +299,12 @@ router.post(
 
       // Generate new access token
       const accessToken = generateAccessToken(user.id, user.role);
+      // Generate new refresh token (token rotation per SDD 5.1)
+      const newRefreshToken = generateRefreshToken(user.id);
 
       res.json({
         accessToken,
+        refreshToken: newRefreshToken,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

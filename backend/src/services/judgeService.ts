@@ -2,6 +2,7 @@
  * Judge Service
  * Main judge worker process for submission evaluation
  * Validates: REQ-6.1, REQ-6.2, REQ-6.3, REQ-6.4, REQ-6.9
+ * Security: SDD 3.2.4 (Verify SHA-256 before execution)
  */
 
 import { logger } from '../utils/logger';
@@ -13,6 +14,9 @@ import { SubmissionStatus } from '@prisma/client';
 import { emitSubmissionUpdate, emitSubmissionComplete } from './submissionSocketService';
 import { invalidateScoreboardCache } from './scoreboardService';
 import { emitScoreboardUpdate } from './scoreboardSocketService';
+import { downloadTestCaseFile } from './s3Service';
+import { verifySHA256 } from '../utils/checksumUtils';
+import { AppError } from '../middleware/errorHandler';
 
 /**
  * Main judge submission function
@@ -292,7 +296,8 @@ async function updateSubmissionWithError(submissionId: string, error: string): P
 }
 
 /**
- * Get test cases for a problem
+ * Get test cases for a problem with S3 download and SHA-256 verification
+ * SDD 3.2.4: Resource Downloader — Verify SHA-256 before execution
  */
 async function getTestCases(problemId: string): Promise<Array<{
   id: string;
@@ -300,16 +305,67 @@ async function getTestCases(problemId: string): Promise<Array<{
   outputFile: string;
   orderIndex: number;
 }>> {
-  const testCases = await prisma.testCase.findMany({
+  // Step 1: Fetch testcase metadata from database (S3 keys + checksums)
+  const testCaseMeta = await prisma.testCase.findMany({
     where: { problemId },
     orderBy: { orderIndex: 'asc' },
     select: {
       id: true,
-      inputFile: true,
-      outputFile: true,
+      inputFile: true,       // S3 key
+      outputFile: true,      // S3 key
+      inputChecksum: true,   // SHA-256 hex digest
+      outputChecksum: true,  // SHA-256 hex digest
       orderIndex: true,
     },
   });
+
+  // Step 2: Download from S3 and verify checksums
+  const testCases = await Promise.all(
+    testCaseMeta.map(async (tc) => {
+      // Download input and output files from S3
+      const inputBuffer = await downloadTestCaseFile(tc.inputFile);
+      const outputBuffer = await downloadTestCaseFile(tc.outputFile);
+
+      // Verify SHA-256 checksums (SDD 3.2.4 — defense-in-depth)
+      if (!verifySHA256(inputBuffer, tc.inputChecksum)) {
+        logger.error('Testcase input integrity check failed', {
+          problemId,
+          testCaseId: tc.id,
+          s3Key: tc.inputFile,
+        });
+        throw new AppError(
+          500,
+          'TESTCASE_INTEGRITY_ERROR',
+          `Testcase input integrity check failed for test case ${tc.id}`
+        );
+      }
+
+      if (!verifySHA256(outputBuffer, tc.outputChecksum)) {
+        logger.error('Testcase output integrity check failed', {
+          problemId,
+          testCaseId: tc.id,
+          s3Key: tc.outputFile,
+        });
+        throw new AppError(
+          500,
+          'TESTCASE_INTEGRITY_ERROR',
+          `Testcase output integrity check failed for test case ${tc.id}`
+        );
+      }
+
+      logger.debug('Testcase integrity verified', {
+        testCaseId: tc.id,
+        orderIndex: tc.orderIndex,
+      });
+
+      return {
+        id: tc.id,
+        inputFile: inputBuffer.toString('utf8'),
+        outputFile: outputBuffer.toString('utf8'),
+        orderIndex: tc.orderIndex,
+      };
+    })
+  );
 
   return testCases;
 }

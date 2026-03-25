@@ -1,3 +1,4 @@
+import argon2 from 'argon2';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { randomUUID } from 'crypto';
@@ -7,7 +8,15 @@ import { randomUUID } from 'crypto';
  * Handles password hashing, JWT token generation/validation, and verification tokens
  */
 
-const BCRYPT_COST_FACTOR = 12;
+// Argon2id configuration per SDD spec (memory=64MB, iterations=3, parallelism=4)
+const ARGON2_OPTIONS: argon2.Options & { raw?: false } = {
+  type: argon2.argon2id,
+  memoryCost: 65536,  // 64 MB
+  timeCost: 3,        // iterations
+  parallelism: 4,
+};
+
+
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-change-in-production';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'default-refresh-secret-change-in-production';
 const ACCESS_TOKEN_EXPIRY = '7d';
@@ -16,22 +25,45 @@ const EMAIL_VERIFICATION_EXPIRY_HOURS = 24;
 const PASSWORD_RESET_EXPIRY_HOURS = 1;
 
 /**
- * Hash a password using bcrypt with cost factor 12
+ * Hash a password using Argon2id (SDD 5.1 spec)
  * @param password - Plain text password
  * @returns Hashed password
  */
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, BCRYPT_COST_FACTOR);
+  return argon2.hash(password, ARGON2_OPTIONS);
+}
+
+/**
+ * Check if a password hash is a legacy bcrypt hash
+ * bcrypt hashes start with $2b$, $2a$, or $2y$
+ */
+function isBcryptHash(hash: string): boolean {
+  return /^\$2[aby]\$/.test(hash);
+}
+
+/**
+ * Check if a hash needs to be re-hashed with Argon2id
+ * @param hash - Password hash from database
+ * @returns True if hash is legacy bcrypt format
+ */
+export function needsRehash(hash: string): boolean {
+  return isBcryptHash(hash);
 }
 
 /**
  * Verify a password against a hash
+ * Supports both Argon2id (new) and bcrypt (legacy) hashes for backward compatibility
  * @param password - Plain text password
  * @param hash - Hashed password from database
  * @returns True if password matches, false otherwise
  */
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  if (isBcryptHash(hash)) {
+    // Legacy bcrypt hash — verify with bcrypt for backward compatibility
+    return bcrypt.compare(password, hash);
+  }
+  // Argon2id hash — use argon2 verification
+  return argon2.verify(hash, password);
 }
 
 /**

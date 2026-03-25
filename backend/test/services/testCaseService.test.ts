@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import AdmZip from 'adm-zip';
-import { extractTestCasesFromZip, uploadTestCases } from '../../src/../src/services/testCaseService';
+import { extractTestCasesFromZip, uploadTestCases } from '../../src/services/testCaseService';
 import { AppError } from '../../src/middleware/errorHandler';
 import prisma from '../../src/utils/prisma';
 
@@ -23,7 +23,18 @@ jest.mock('../../src/utils/logger', () => ({
   logger: {
     info: jest.fn(),
     error: jest.fn(),
+    debug: jest.fn(),
   },
+}));
+
+// Mock S3 service
+jest.mock('../../src/services/s3Service', () => ({
+  uploadTestCaseFile: jest.fn<any>().mockResolvedValue(undefined),
+  deleteTestCaseFiles: jest.fn<any>().mockResolvedValue(undefined),
+  getTestCaseS3Key: jest.fn<any>().mockImplementation(
+    (problemId: string, orderIndex: number, type: string) =>
+      `testcases/${problemId}/${orderIndex}.${type}`
+  ),
 }));
 
 describe('TestCaseService', () => {
@@ -119,7 +130,7 @@ describe('TestCaseService', () => {
       (prisma.testCase.create as jest.Mock<any>).mockResolvedValue({});
     });
 
-    it('should upload test cases successfully', async () => {
+    it('should upload test cases successfully with S3 keys and checksums', async () => {
       const zip = new AdmZip();
       zip.addFile('test1.in', Buffer.from('1 2\n'));
       zip.addFile('test1.out', Buffer.from('3\n'));
@@ -137,6 +148,70 @@ describe('TestCaseService', () => {
         where: { problemId: mockProblemId },
       });
       expect(prisma.testCase.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('should store S3 keys instead of raw content', async () => {
+      const zip = new AdmZip();
+      zip.addFile('test1.in', Buffer.from('1 2\n'));
+      zip.addFile('test1.out', Buffer.from('3\n'));
+      
+      const zipBuffer = zip.toBuffer();
+      await uploadTestCases(mockProblemId, zipBuffer, 1);
+      
+      const createCalls = (prisma.testCase.create as jest.Mock).mock.calls;
+      const data = (createCalls[0][0] as any).data;
+      
+      // inputFile should be an S3 key, not raw content
+      expect(data.inputFile).toBe(`testcases/${mockProblemId}/0.in`);
+      expect(data.outputFile).toBe(`testcases/${mockProblemId}/0.out`);
+    });
+
+    it('should compute and store SHA-256 checksums', async () => {
+      const zip = new AdmZip();
+      zip.addFile('test1.in', Buffer.from('1 2\n'));
+      zip.addFile('test1.out', Buffer.from('3\n'));
+      
+      const zipBuffer = zip.toBuffer();
+      await uploadTestCases(mockProblemId, zipBuffer, 1);
+      
+      const createCalls = (prisma.testCase.create as jest.Mock).mock.calls;
+      const data = (createCalls[0][0] as any).data;
+      
+      // Should have checksum fields that are 64-char hex strings
+      expect(data.inputChecksum).toBeDefined();
+      expect(data.inputChecksum).toHaveLength(64);
+      expect(data.inputChecksum).toMatch(/^[0-9a-f]{64}$/);
+      
+      expect(data.outputChecksum).toBeDefined();
+      expect(data.outputChecksum).toHaveLength(64);
+      expect(data.outputChecksum).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('should upload files to S3', async () => {
+      const { uploadTestCaseFile } = require('../../src/services/s3Service');
+      
+      const zip = new AdmZip();
+      zip.addFile('test1.in', Buffer.from('1 2\n'));
+      zip.addFile('test1.out', Buffer.from('3\n'));
+      
+      const zipBuffer = zip.toBuffer();
+      await uploadTestCases(mockProblemId, zipBuffer, 1);
+      
+      // Should upload 2 files (1 input + 1 output)
+      expect(uploadTestCaseFile).toHaveBeenCalledTimes(2);
+    });
+
+    it('should delete existing S3 files before uploading new ones', async () => {
+      const { deleteTestCaseFiles } = require('../../src/services/s3Service');
+      
+      const zip = new AdmZip();
+      zip.addFile('test1.in', Buffer.from('1 2\n'));
+      zip.addFile('test1.out', Buffer.from('3\n'));
+      
+      const zipBuffer = zip.toBuffer();
+      await uploadTestCases(mockProblemId, zipBuffer);
+      
+      expect(deleteTestCaseFiles).toHaveBeenCalledWith(mockProblemId);
     });
 
     it('should mark first sampleCount test cases as non-hidden', async () => {
