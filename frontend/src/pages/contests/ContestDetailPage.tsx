@@ -182,32 +182,37 @@ export default function ContestDetailPage() {
 
       {activeTab === 'problems' && (
         <div>
-          {!isRunning && !isEnded ? (
+          {contest.problems && contest.problems.length > 0 ? (
             <div className="panel">
-              <div className="panel-body" style={{ textAlign: 'center', padding: 40, color: '#999' }}>
-                Problems will be visible when the contest starts.
-              </div>
-            </div>
-          ) : contest.problems && contest.problems.length > 0 ? (
-            <div className="panel">
+              {isUpcoming && (
+                <div style={{ padding: '8px 16px', background: '#fff8e1', fontSize: 13, color: '#795548', borderBottom: '1px solid #ffe082' }}>
+                  ⏳ Contest hasn't started yet — problems listed below for reference.
+                </div>
+              )}
               <table>
                 <thead>
                   <tr>
                     <th style={{ width: 50 }}>#</th>
                     <th>Problem</th>
-                    {contest.scoringType === 'ioi' && <th>Points</th>}
+                    <th style={{ width: 90 }}>Difficulty</th>
+                    {contest.scoringRule === 'IOI' && <th style={{ width: 70 }}>Points</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {contest.problems.map((p: any, i: number) => (
                     <tr key={p.problemId}>
-                      <td>{String.fromCharCode(65 + i)}</td>
+                      <td style={{ fontWeight: 700, color: '#555' }}>{String.fromCharCode(65 + i)}</td>
                       <td>
-                        <Link to={`/problems/${p.problemId}`}>
-                          Problem {String.fromCharCode(65 + i)}
+                        <Link to={`/problems/${p.problemId}`} style={{ fontWeight: 500 }}>
+                          {p.title || `Problem ${String.fromCharCode(65 + i)}`}
                         </Link>
                       </td>
-                      {contest.scoringType === 'ioi' && <td>{p.points ?? 100}</td>}
+                      <td>
+                        <span className={`badge ${p.difficulty === 'EASY' ? 'badge-green' : p.difficulty === 'MEDIUM' ? 'badge-yellow' : 'badge-red'}`} style={{ fontSize: 10 }}>
+                          {p.difficulty || 'EASY'}
+                        </span>
+                      </td>
+                      {contest.scoringRule === 'IOI' && <td>{p.points ?? 100}</td>}
                     </tr>
                   ))}
                 </tbody>

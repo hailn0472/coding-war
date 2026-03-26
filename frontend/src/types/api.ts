@@ -34,6 +34,7 @@ export interface Problem {
   timeLimit: number;
   memoryLimit: number;
   tags: string[];
+  userSolved?: boolean;
   sampleTestCases: TestCase[];
   statistics?: {
     totalSubmissions: number;

@@ -113,9 +113,29 @@ export default function ProblemListPage() {
                     {data.problems.map((problem: any) => (
                       <tr key={problem.id}>
                         <td>
-                          <Link to={`/problems/${problem.id}`} style={{ fontWeight: 500 }}>
-                            {problem.title}
-                          </Link>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            {problem.userSolved && (
+                              <span
+                                title="Solved"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  width: 18,
+                                  height: 18,
+                                  borderRadius: '50%',
+                                  background: '#22c55e',
+                                  color: '#fff',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  flexShrink: 0,
+                                }}
+                              >✓</span>
+                            )}
+                            <Link to={`/problems/${problem.id}`} style={{ fontWeight: 500 }}>
+                              {problem.title}
+                            </Link>
+                          </div>
                         </td>
                         <td>
                           <span className={`badge ${

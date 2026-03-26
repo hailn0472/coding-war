@@ -16,6 +16,8 @@ import SubmissionListPage from './pages/submissions/SubmissionListPage';
 import SubmissionDetailPage from './pages/submissions/SubmissionDetailPage';
 import UserProfilePage from './pages/users/UserProfilePage';
 import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminEditProblemPage from './pages/admin/AdminEditProblemPage';
+import AdminCreateProblemPage from './pages/admin/AdminCreateProblemPage';
 
 export const router = createBrowserRouter([
   {
@@ -50,6 +52,22 @@ export const router = createBrowserRouter([
         element: (
           <ProtectedRoute requireAdmin>
             <AdminDashboard />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/problems/create',
+        element: (
+          <ProtectedRoute requireAdmin>
+            <AdminCreateProblemPage />
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: 'admin/problems/:id/edit',
+        element: (
+          <ProtectedRoute requireAdmin>
+            <AdminEditProblemPage />
           </ProtectedRoute>
         ),
       },

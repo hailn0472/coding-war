@@ -6,7 +6,7 @@ export function useProblems(filters: ProblemFilters = {}) {
   return useQuery({
     queryKey: ['problems', filters],
     queryFn: () => problemsAPI.list(filters),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 0, // always refetch so userSolved stays current
   });
 }
 

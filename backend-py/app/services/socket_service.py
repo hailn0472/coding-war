@@ -10,15 +10,14 @@ from app.utils.logger import get_logger
 
 logger = get_logger("socket_service")
 
-# Create Socket.IO async server
+# Create Socket.IO async server with explicit allowed origins.
+# This is used as the OUTER ASGI wrapper in main.py (not a mounted sub-app),
+# so FastAPI's CORSMiddleware won't interfere with socket.io paths.
 sio = socketio.AsyncServer(
     async_mode="asgi",
     cors_allowed_origins=settings.cors_origins,
     logger=False,
 )
-
-# ASGI app to mount in FastAPI
-socket_app = socketio.ASGIApp(sio)
 
 
 # ──────────────────────────── Events ────────────────────────────

@@ -1,271 +1,159 @@
 # Coding War
 
-An Online Judge Platform for competitive programming - DMOJ clone
+An online judge platform for competitive programming — built with React + Python/FastAPI.
 
 ## Overview
 
-Coding War is a complete online judge system that allows users to:
-- Practice coding problems
-- Participate in programming contests
-- Get real-time feedback on submissions
-- Track progress and rankings
+Coding War lets users:
+- Practice algorithm problems with a live judge
+- Participate in ACM/IOI-style contests
+- Get real-time verdict feedback via WebSocket
+- Track rankings on a live scoreboard
 
 ## Project Structure
 
 ```
 coding-war/
-├── frontend/          # React frontend application
-├── backend/           # Node.js/Express backend API
-├── docker-compose.yml # Docker services configuration
-└── Makefile          # Convenience commands
+├── frontend/           # React 19 + TypeScript (Vite)
+├── backend-py/         # Python 3.12 + FastAPI + SQLAlchemy
+├── docker-compose.yml  # Full-stack local environment
+└── Makefile            # Convenience aliases
 ```
 
 ## Quick Start
 
 ### Prerequisites
+- Docker & Docker Compose (v2)
 
-- Node.js 20+
-- Docker and Docker Compose
-- npm 8+
-
-### 1. Start Infrastructure Services
+### 1. Start everything
 
 ```bash
-docker-compose up -d
+docker compose up --build -d
 ```
 
 This starts:
-- PostgreSQL database (port 5432)
-- Redis cache/queue (port 6379)
+| Service | Port | Description |
+|---|---|---|
+| `frontend` | 5173 | React dev server (Vite HMR) |
+| `backend` | 3000 | FastAPI + Uvicorn |
+| `postgres` | 5432 | PostgreSQL 15 |
+| `redis` | 6379 | Redis 7 (cache + job queue) |
+| `minio` | 9000 | S3-compatible object storage |
+| `judge` | — | Celery worker (code execution) |
 
-### 2. Start Backend
+Schema migrations run automatically on backend startup (idempotent).
 
-```bash
-cd backend
-npm install
-npm run dev
-```
+### 2. Open the app
 
-Backend API runs on `http://localhost:3000`
+- **Frontend**: http://localhost:5173
+- **API docs**: http://localhost:3000/docs
 
-### 3. Start Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Frontend runs on `http://localhost:5173`
-
-## Development
-
-### Using Makefile
+### 3. Useful commands
 
 ```bash
-make install    # Install all dependencies
-make start      # Start Docker services
-make dev        # Start backend dev server
-make stop       # Stop all services
-make logs       # View logs
-```
+# View logs
+docker compose logs -f backend
 
-### Manual Commands
+# Rebuild backend only (after code changes)
+docker compose up --build -d backend
 
-**Backend:**
-```bash
-cd backend
-npm run dev          # Development server
-npm run build        # Build for production
-npm run lint         # Lint code
-npm run prisma:studio # Database GUI
-```
+# Access PostgreSQL
+docker compose exec postgres psql -U postgres -d codingwar
 
-**Frontend:**
-```bash
-cd frontend
-npm run dev          # Development server
-npm run build        # Build for production
-npm run test         # Run tests
-npm run lint         # Lint code
+# Restart everything cleanly
+docker compose down && docker compose up --build -d
 ```
 
 ## Tech Stack
 
 ### Frontend
-- React 19 + TypeScript
-- Vite
-- Tailwind CSS
-- TanStack Query
-- Zustand
-- Monaco Editor
-- Socket.io Client
+| | |
+|---|---|
+| Framework | React 19 + TypeScript |
+| Build | Vite |
+| State | Zustand + TanStack Query |
+| Routing | React Router v7 |
+| Real-time | Socket.io Client |
+| HTTP | Axios |
 
 ### Backend
-- Node.js 20 + Express
-- TypeScript
-- PostgreSQL + Prisma ORM
-- Redis (Cache + Bull Queue)
-- Socket.io
-- Docker
-- NodeMailer
-- Jest (29 test files, 500+ tests, 85%+ coverage)
-
-## Documentation
-
-- [Frontend README](./frontend/README.md) - Frontend documentation and setup
-- [Backend README](./backend/README.md) - Backend API documentation and setup
-- [Project Structure](./PROJECT_STRUCTURE.md) - Detailed project structure and implementation progress
-- [Quick Start Guide](./QUICKSTART.md) - Getting started guide (if exists)
-
-## Current Progress
-
-**Overall: ~65% Complete**
-
-- Backend: 60% (26/40 tasks completed)
-- Frontend: 70% (UI components done, API integration pending)
-- Infrastructure: 80% (Docker, database, Redis ready)
-- Testing: 85%+ coverage (29 test files, 500+ tests)
-
-**Next Milestone:** Complete Phase 5 (Production Readiness) - Tasks 27-40
+| | |
+|---|---|
+| Framework | FastAPI + Uvicorn |
+| ORM | SQLAlchemy 2.0 async |
+| Database | PostgreSQL 15 |
+| Cache/Queue | Redis 7 + Celery |
+| WebSocket | python-socketio (ASGI outer wrapper) |
+| Auth | Argon2id + JWT |
+| Storage | S3 / MinIO |
+| Validation | Pydantic v2 |
 
 ## Features
 
-### Current Status (~65% Complete)
+### ✅ Authentication & Authorization
+- Register / login / email verification / password reset
+- JWT (access + refresh tokens)
+- Role-based access: Admin, User, Guest
 
-**Frontend (70% done):**
-- ✅ UI components and layouts
-- ✅ Navigation and routing
-- ✅ Theme system
-- ✅ Code editor (Monaco)
-- 🚧 API integration (ready for connection)
+### ✅ Problem Management
+- CRUD with Markdown + LaTeX descriptions
+- Difficulty levels: Easy / Medium / Hard
+- Public / Private / Contest-only visibility
+- **Inline test case manager**: add, visualize, and delete test cases as plain text
+- Legacy ZIP upload → S3 (COMPLIANCE ObjectLock, immutable)
 
-**Backend (60% done):**
-- ✅ Project structure and infrastructure (Task 1)
-- ✅ Database schema with Prisma (Task 2)
-- ✅ Authentication system (Tasks 3-4)
-- ✅ Authorization and RBAC (Task 5)
-- ✅ Email service integration (Task 6)
-- ✅ Core API infrastructure (Task 7)
-- ✅ Problem management (Tasks 9-11)
-- ✅ Judge system (Tasks 12-15)
-- ✅ Contest system (Tasks 17-23)
-- ✅ User management (Task 24)
-- ✅ Admin panel (Task 25)
-- ✅ Exception handling and logging (Task 26)
-- 🚧 Performance optimization (Tasks 28-29)
-- 🚧 Testing infrastructure (Tasks 31-33)
-- 🚧 Deployment setup (Tasks 34-35)
+### ✅ Judge System
+- Languages: C, C++17, Python 3, Java
+- Docker sandbox: `network=none`, read-only rootfs, cap-drop ALL
+- Time and memory limit enforcement
+- Verdicts: AC, WA, TLE, MLE, RE, CE
+- Real-time status updates (Queued → Compiling → Running → Verdict)
 
-### Implemented Features
+### ✅ Contest System
+- ACM/ICPC and IOI scoring modes
+- Problem assignment during create or via `PUT /{id}/problems`
+- Contest registration with time-based access control
+- Freeze time support
+- Live scoreboard via Socket.io
 
-#### Authentication & Authorization ✅
-- User registration with email verification
-- Login with JWT tokens
-- Password reset flow
-- Role-based access control (Admin/User/Guest)
-- Protected endpoints
-
-#### Problem Management ✅
-- CRUD operations for problems
-- Test case upload (zip files)
-- Problem filtering and search
-- Difficulty levels (Easy/Medium/Hard)
-- Markdown and LaTeX support
-- Public/Private/Contest-only visibility
-
-#### Judge System ✅
-- Multi-language support (C, C++, Python, Java)
-- Docker-based sandboxing
-- Resource limit enforcement (time, memory)
-- Compilation error handling
-- Test case execution
-- Verdict calculation (AC, WA, TLE, MLE, RE, CE)
-- Real-time status updates via WebSocket
-
-#### Contest System ✅
-- Contest creation and management
-- Public and private contests
-- Contest registration
-- Time-based access control
-- IOI and ACM/ICPC scoring rules
-- Live scoreboard with freeze time
-- Real-time scoreboard updates
-
-#### User Management ✅
-- User profiles with statistics
+### ✅ User Features
+- Profile with submission statistics
 - Submission history
-- Profile updates
+- **Resubmit** — from any failed submission, pre-fills the editor with previous code
 
-#### Admin Panel ✅
-- User management and role assignment
+### ✅ Admin Panel
+- User management (search, role assignment)
+- Problem CRUD with test case manager
+- Contest creation and management
 - System statistics dashboard
-- Submission rejudge functionality
-
-#### Infrastructure ✅
-- RESTful API with Express
-- PostgreSQL database with Prisma ORM
-- Redis for caching and queuing
-- Socket.io for real-time features
-- Docker containerization
-- Comprehensive error handling
-- Request logging and tracing
-- Rate limiting
-- Input validation
-
-### Planned Features (Tasks 27-40)
-
-- Caching strategy with Redis
-- Performance optimizations
-- Horizontal scaling support
-- Comprehensive test suite (unit, integration, E2E)
-- CI/CD pipeline
-- Monitoring and logging infrastructure
-- Security hardening
-- API documentation (Swagger)
-- Production deployment
 
 ## Architecture
 
 ```
-┌─────────────────┐      ┌──────────────────┐      ┌──────────────┐
-│   Frontend      │─────▶│  Backend API     │─────▶│  PostgreSQL  │
-│   (React)       │      │  (Express)       │      │   Database   │
-│   Port: 5173    │      │  Port: 3000      │      │   Port: 5432 │
-└─────────────────┘      └──────────────────┘      └──────────────┘
-        │                        │
-        │                        ├─────▶ Redis (Cache/Queue)
-        │                        │       Port: 6379
-        │                        │
-        └────────────────────────┴─────▶ WebSocket (Socket.io)
-                                 │
-                                 └─────▶ Judge Workers (Docker)
-                                         - Compilation
-                                         - Execution
-                                         - Sandboxing
+Browser
+  │
+  ├─ HTTP /api/*  ──────────────────▶ FastAPI (CORSMiddleware)
+  │                                       │
+  └─ WS  /socket.io/*  ──────────▶ python-socketio (outer ASGI)
+                                          │
+                          ┌───────────────┴───────────────┐
+                      PostgreSQL                         Redis
+                      (SQLAlchemy)                 (cache + Celery)
+                                                          │
+                                                    Celery Worker
+                                                   (Docker sandbox)
+                                                          │
+                                                       MinIO / S3
+                                                     (test cases)
 ```
 
-### System Components
+**Socket.IO as the outer ASGI layer** — prevents duplicate CORS headers that occur when Socket.IO is mounted as a FastAPI sub-app.
 
-1. **Frontend (React)**: User interface with real-time updates
-2. **Backend API (Express)**: RESTful endpoints and WebSocket server
-3. **Database (PostgreSQL)**: Persistent data storage
-4. **Cache/Queue (Redis)**: Caching and job queue management
-5. **Judge System (Docker)**: Isolated code execution environment
-6. **Email Service (NodeMailer)**: Transactional emails
+## Documentation
 
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
+- [Frontend README](./frontend/README.md)
+- [Backend README](./backend-py/README.md)
 
 ## License
 
 MIT
-
-## Support
-
-For issues and questions, please open an issue on GitHub.

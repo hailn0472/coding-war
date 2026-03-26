@@ -9,6 +9,9 @@ export interface ProblemListProps {
 
 export default function ProblemList({ problems, onProblemClick }: ProblemListProps) {
   const difficultyVariant = {
+    EASY: 'easy' as const,
+    MEDIUM: 'medium' as const,
+    HARD: 'hard' as const,
     easy: 'easy' as const,
     medium: 'medium' as const,
     hard: 'hard' as const,
@@ -20,7 +23,6 @@ export default function ProblemList({ problems, onProblemClick }: ProblemListPro
         <TableRow>
           <TableHead>Title</TableHead>
           <TableHead>Difficulty</TableHead>
-          <TableHead>Acceptance Rate</TableHead>
           <TableHead>Tags</TableHead>
         </TableRow>
       </TableHeader>
@@ -31,19 +33,24 @@ export default function ProblemList({ problems, onProblemClick }: ProblemListPro
             onClick={() => onProblemClick(problem.id)}
           >
             <TableCell>
-              <span className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
-                {problem.title}
-              </span>
+              <div className="flex items-center gap-2">
+                {problem.userSolved && (
+                  <span
+                    title="Solved"
+                    className="flex-shrink-0 w-5 h-5 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold"
+                  >
+                    ✓
+                  </span>
+                )}
+                <span className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">
+                  {problem.title}
+                </span>
+              </div>
             </TableCell>
             <TableCell>
-              <Badge variant={difficultyVariant[problem.difficulty]} size="sm">
-                {problem.difficulty.charAt(0).toUpperCase() + problem.difficulty.slice(1)}
+              <Badge variant={difficultyVariant[problem.difficulty] ?? 'easy'} size="sm">
+                {problem.difficulty.charAt(0).toUpperCase() + problem.difficulty.slice(1).toLowerCase()}
               </Badge>
-            </TableCell>
-            <TableCell>
-              <span className="text-gray-700 dark:text-gray-300">
-                {problem.acceptanceRate.toFixed(1)}%
-              </span>
             </TableCell>
             <TableCell>
               <div className="flex flex-wrap gap-1">

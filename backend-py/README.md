@@ -1,6 +1,6 @@
-# Coding War Backend (Python/FastAPI)
+# Coding War — Backend (Python / FastAPI)
 
-> Migrated from TypeScript/Express/Prisma → Python/FastAPI/SQLAlchemy
+FastAPI backend for the Coding War online judge platform.
 
 ## Tech Stack
 
@@ -8,38 +8,25 @@
 |---|---|
 | Framework | FastAPI + Uvicorn |
 | Database | PostgreSQL 15 + SQLAlchemy 2.0 (async) |
-| Migrations | Alembic |
-| Cache/Queue | Redis 7 |
-| Task Queue | Celery |
-| WebSocket | python-socketio (ASGI) |
+| Migrations | Idempotent raw SQL via `lifespan` startup event |
+| Cache / Queue | Redis 7 + Celery |
+| WebSocket | python-socketio (ASGI outer wrapper) |
 | Auth | Argon2id + JWT (python-jose) |
-| Storage | S3/MinIO (boto3) |
+| Storage | S3 / MinIO (boto3) |
 | Validation | Pydantic v2 |
 | Logging | structlog |
-| Testing | Pytest + httpx |
 
-## Quick Start
+## Quick Start (Docker)
+
+All services are managed by Docker Compose at the repo root:
 
 ```bash
-# 1. Install dependencies
-pip install -e ".[dev]"
-
-# 2. Start infrastructure
-docker-compose up -d postgres redis
-
-# 3. Configure environment
-cp .env.example .env
-
-# 4. Run migrations
-python -m alembic revision --autogenerate -m "initial"
-python -m alembic upgrade head
-
-# 5. Start API server (dev mode with auto-reload)
-uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload
-
-# 6. Start judge worker (separate terminal)
-celery -A app.worker worker --loglevel=info --concurrency=3
+docker compose up --build -d
 ```
+
+The backend container runs `entrypoint.sh` which:
+1. Applies schema migrations (idempotent, safe to re-run)
+2. Starts Uvicorn pointing at `app.main:top_app` (Socket.IO ASGI wrapper)
 
 ## API Documentation
 
@@ -47,112 +34,143 @@ celery -A app.worker worker --loglevel=info --concurrency=3
 - **ReDoc**: http://localhost:3000/redoc
 - **Health**: http://localhost:3000/health
 
-## API Endpoints (29 total)
+## API Endpoints
 
 ### Authentication (`/api/auth`) — 6 endpoints
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| POST | `/register` | — | User registration |
-| POST | `/verify-email` | — | Email verification |
-| POST | `/login` | — | Login → JWT |
+| POST | `/register` | — | Register + send verification email |
+| POST | `/verify-email` | — | Verify email token |
+| POST | `/login` | — | Login → access + refresh JWT |
 | POST | `/refresh` | — | Refresh access token |
-| POST | `/forgot-password` | — | Request password reset |
+| POST | `/forgot-password` | — | Send reset email |
 | POST | `/reset-password` | — | Reset with token |
 
-### Problems (`/api/problems`) — 6 endpoints
+### Problems (`/api/problems`) — 9 endpoints
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/` | Optional | List problems (filter, paginate) |
+| GET | `/` | Optional | List problems (paginate, filter, search) |
 | GET | `/{id}` | Optional | Get problem details |
 | POST | `/` | Admin | Create problem |
 | PUT | `/{id}` | Admin | Update problem |
 | DELETE | `/{id}` | Admin | Delete problem |
-| POST | `/{id}/test-cases` | Admin | Upload test cases (zip) |
+| GET | `/{id}/test-cases` | Admin | List test cases (DB inline + S3 fallback) |
+| POST | `/{id}/test-cases/single` | Admin | Add inline text test case |
+| DELETE | `/{id}/test-cases/{tc_id}` | Admin | Delete test case |
+| POST | `/{id}/test-cases` | Admin | Upload test cases (zip → S3) |
 
 ### Submissions (`/api/submissions`) — 4 endpoints
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/` | User | Submit solution |
 | GET | `/{id}` | User | Get submission (ownership check) |
-| GET | `/` | User | List submissions |
-| POST | `/{id}/rejudge` | Admin | Rejudge submission |
+| GET | `/` | User | List user's submissions |
+| POST | `/{id}/rejudge` | Admin | Rejudge a submission |
 
-### Contests (`/api/contests`) — 7 endpoints
+### Contests (`/api/contests`) — 8 endpoints
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/` | — | List contests |
-| GET | `/{id}` | Optional | Get contest details |
-| POST | `/` | Admin | Create contest |
-| PUT | `/{id}` | Admin | Update contest |
+| GET | `/` | — | List contests (filter by status) |
+| GET | `/{id}` | Optional | Get contest + problems (with title & difficulty) |
+| POST | `/` | Admin | Create contest (accepts `problems` array) |
+| PUT | `/{id}` | Admin | Update contest metadata |
+| PUT | `/{id}/problems` | Admin | Replace contest problem list |
 | DELETE | `/{id}` | Admin | Delete contest |
 | POST | `/{id}/register` | User | Register for contest |
-| GET | `/{id}/scoreboard` | Optional | Get scoreboard |
+| GET | `/{id}/scoreboard` | Optional | Live scoreboard |
 
 ### Users (`/api/users`) — 3 endpoints
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/{id}` | Optional | Get profile + stats |
+| GET | `/{id}` | Optional | Profile + statistics |
 | PUT | `/{id}` | User | Update own profile |
 | GET | `/{id}/submissions` | User | Submission history |
 
 ### Admin (`/api/admin`) — 3 endpoints
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| GET | `/users` | Admin | List all users |
-| PUT | `/users/{id}/role` | Admin | Update user role |
+| GET | `/users` | Admin | List users (search, paginate) |
+| PUT | `/users/{id}/role` | Admin | Change user role |
 | GET | `/statistics` | Admin | System statistics |
 
 ## Project Structure
 
 ```
 app/
-├── main.py              # FastAPI entry point + middleware
-├── config.py            # Pydantic Settings (env vars)
-├── database.py          # Async SQLAlchemy engine
+├── main.py              # FastAPI app + lifespan startup migration
+│                        # Exports top_app = socketio.ASGIApp(sio, app)
+├── config.py            # Pydantic Settings
+├── database.py          # Async SQLAlchemy engine + session factory
 ├── worker.py            # Celery judge worker
-├── models/              # 8 SQLAlchemy models
-├── schemas/             # Pydantic request/response
-├── routers/             # 6 API router modules
-├── services/            # 14 business logic services
-├── middleware/          # Security headers, error handler, rate limit, logging
-├── dependencies/        # JWT auth, RBAC authorize, DB session
+├── models/              # SQLAlchemy models (User, Problem, TestCase,
+│                        #   Submission, TestCaseResult, Contest,
+│                        #   ContestProblem, ContestParticipant)
+├── schemas/             # Pydantic request/response schemas
+├── routers/             # auth, problems, submissions, contests, users, admin
+├── services/            # Business logic (14 services)
+│   ├── socket_service.py   # python-socketio sio instance + event handlers
+│   └── ...
+├── middleware/          # Security headers, error handler, logging, rate limit
+├── dependencies/        # get_db (auto-commit session), JWT auth, RBAC
 └── utils/               # Logger, SHA-256 checksum
 ```
 
-## Security (SDRD-Aligned)
+## Architecture: Socket.IO Integration
+
+Socket.IO is the **outer ASGI layer**:
+
+```
+Uvicorn → top_app (socketio.ASGIApp)
+            ├── /socket.io/*  →  socket.io  (own CORS)
+            └── everything else → FastAPI app (CORSMiddleware)
+```
+
+This avoids duplicate CORS headers that occurred when Socket.IO was mounted as a sub-app inside FastAPI.
+
+## Database Schema — Key Models
+
+| Model | Table | Notes |
+|---|---|---|
+| `User` | `users` | Argon2id password, RBAC role |
+| `Problem` | `problems` | Markdown description, S3 test case keys |
+| `TestCase` | `test_cases` | `input_content` / `output_content` for inline storage |
+| `Submission` | `submissions` | Language, verdict, execution stats |
+| `Contest` | `contests` | IOI/ACM scoring, freeze time |
+| `ContestProblem` | `contest_problems` | `order_index`, `points`; eager-loaded with `lazy="selectin"` |
+
+## Security
 
 | Control | Implementation |
 |---|---|
-| Password Hashing | Argon2id (memory=64MB, iterations=3, parallelism=4) |
+| Password Hashing | Argon2id (64 MB, 3 iterations, parallelism 4) |
 | Authentication | JWT Bearer (7-day access, 30-day refresh) |
-| Authorization | RBAC with role hierarchy (Admin > User > Guest) |
+| Authorization | RBAC: Admin > User > Guest |
 | Rate Limiting | 3-tier: 100/min general, 10/min submit, 5/min login |
-| Input Validation | Pydantic v2 schemas on all endpoints |
+| Input Validation | Pydantic v2 on all endpoints |
 | Security Headers | HSTS, CSP, X-Frame-Options, X-Content-Type-Options |
-| S3 Encryption | SSE-AES256 on all testcase uploads (ADR-006) |
-| Integrity | SHA-256 checksums + timing-safe comparison |
-| Sandbox | Docker: network=none, read-only, cap-drop ALL |
-| Server Time | Centralized `_utc_now()` for all time logic (ADR-008) |
-| IDOR Prevention | Ownership checks via `requesting_user_id` (ADR-007) |
+| S3 Test Cases | SSE-AES256, COMPLIANCE ObjectLock (immutable) |
+| Integrity | SHA-256 checksums + timing-safe compare |
+| Sandbox | Docker: `network=none`, read-only rootfs, cap-drop ALL |
+| Server Time | `_utc_now()` — centralised UTC clock (ADR-008) |
 
 ## Environment Variables
 
-See [`.env.example`](.env.example) for the full list. Key variables:
+See `.env.example` for the full list.
 
-| Variable | Default | Description |
-|---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://...` | Async PostgreSQL connection |
-| `REDIS_HOST` | `localhost` | Redis for cache + Celery |
-| `JWT_SECRET` | — | **Required** in production |
-| `S3_ENDPOINT` | `http://localhost:9000` | S3/MinIO endpoint |
-| `JUDGE_CONCURRENCY` | `3` | Parallel judge workers |
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | `postgresql+asyncpg://user:pass@host/db` |
+| `REDIS_HOST` | Redis hostname |
+| `JWT_SECRET` | **Required** — random 32+ byte secret |
+| `S3_ENDPOINT` | S3/MinIO endpoint URL |
+| `JUDGE_CONCURRENCY` | Parallel judge processes (default: 3) |
 
 ## WebSocket Events
 
-| Direction | Event | Description |
+| Direction | Event | Payload |
 |---|---|---|
-| Client → Server | `subscribe:submission` | Subscribe to submission updates |
-| Server → Client | `submission:update` | Real-time status (queued → compiling → running) |
-| Server → Client | `submission:complete` | Final verdict with results |
-| Client → Server | `subscribe:scoreboard` | Subscribe to scoreboard |
-| Server → Client | `scoreboard:update` | Live scoreboard changes |
+| Client → Server | `subscribe:submission` | `{ submissionId }` |
+| Server → Client | `submission:update` | `{ id, status, … }` |
+| Server → Client | `submission:complete` | Full submission with test results |
+| Client → Server | `subscribe:scoreboard` | `{ contestId }` |
+| Server → Client | `scoreboard:update` | Updated scoreboard row |

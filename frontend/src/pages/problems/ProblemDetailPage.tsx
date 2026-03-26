@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useProblem } from '../../hooks/queries/useProblems';
 import { useSubmitSolution } from '../../hooks/queries/useSubmissions';
 import { useAuthStore } from '../../stores/authStore';
@@ -14,13 +16,15 @@ const LANGUAGES = [
 export default function ProblemDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefill = (location.state as any) || {};
   const { isAuthenticated } = useAuthStore();
   const { data: problem, isLoading, isError } = useProblem(id || '');
   const submitMutation = useSubmitSolution();
 
-  const [showSubmit, setShowSubmit] = useState(false);
-  const [language, setLanguage] = useState('CPP');
-  const [sourceCode, setSourceCode] = useState('');
+  const [showSubmit, setShowSubmit] = useState(!!prefill.prefillCode);
+  const [language, setLanguage] = useState(prefill.prefillLanguage || 'CPP');
+  const [sourceCode, setSourceCode] = useState(prefill.prefillCode || '');
   const [cooldownSec, setCooldownSec] = useState(0);
   const [rateLimitMsg, setRateLimitMsg] = useState('');
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -189,8 +193,10 @@ export default function ProblemDetailPage() {
             {/* Problem statement */}
             <div className="panel">
               <div className="panel-header">Problem Statement</div>
-              <div className="panel-body" style={{ lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                {problem.description}
+              <div className="panel-body prose">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {problem.description}
+                </ReactMarkdown>
               </div>
             </div>
 

@@ -4,12 +4,15 @@ Equivalent to: backend/src/routes/contest.routes.ts
 7 endpoints: list, get, create, update, delete, register, scoreboard
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies.auth import CurrentUser, get_current_user, get_optional_user
 from app.dependencies.authorize import require_admin
 from app.dependencies.database import get_db
+from app.models.contest import ContestProblem
 from app.schemas.contest import CreateContestRequest, UpdateContestRequest
 from app.services.contest_service import (
     create_contest,
@@ -41,7 +44,7 @@ def _to_response(c, participant_count: int = 0) -> dict:
     }
 
 
-@router.get("/")
+@router.get("")
 async def list_contests_endpoint(
     status: str | None = None,
     page: int = 1,
@@ -70,13 +73,15 @@ async def get_contest_endpoint(
             "problemId": str(cp.problem_id),
             "orderIndex": cp.order_index,
             "points": cp.points,
+            "title": cp.problem.title if cp.problem else f"Problem {cp.order_index + 1}",
+            "difficulty": cp.problem.difficulty.value if cp.problem else "EASY",
         }
-        for cp in (contest.problems or [])
+        for cp in sorted(contest.problems or [], key=lambda x: x.order_index)
     ]
     return resp
 
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def create_contest_endpoint(
     data: CreateContestRequest,
     db: AsyncSession = Depends(get_db),
@@ -92,7 +97,41 @@ async def create_contest_endpoint(
         scoring_rule=data.scoring_rule,
         visibility=data.visibility,
     )
-    return _to_response(contest)
+    # Save problems if provided
+    if data.problems:
+        for i, p in enumerate(data.problems):
+            cp = ContestProblem(
+                contest_id=contest.id,
+                problem_id=uuid.UUID(p.problem_id),
+                order_index=p.order_index if p.order_index else i,
+                points=p.points,
+            )
+            db.add(cp)
+        await db.flush()
+    return {"contestId": str(contest.id), **_to_response(contest)}
+
+
+@router.put("/{contest_id}/problems")
+async def update_contest_problems_endpoint(
+    contest_id: str,
+    problems: list[dict],
+    db: AsyncSession = Depends(get_db),
+    admin: CurrentUser = Depends(require_admin),
+):
+    """Replace all problems of a contest (admin only)."""
+    from sqlalchemy import delete
+    await db.execute(
+        delete(ContestProblem).where(ContestProblem.contest_id == uuid.UUID(contest_id))
+    )
+    for i, p in enumerate(problems):
+        cp = ContestProblem(
+            contest_id=uuid.UUID(contest_id),
+            problem_id=uuid.UUID(p["problemId"]),
+            order_index=p.get("orderIndex", i),
+            points=p.get("points"),
+        )
+        db.add(cp)
+    return {"message": "Problems updated"}
 
 
 @router.put("/{contest_id}")

@@ -8,6 +8,13 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
+class ProblemEntry(BaseModel):
+    problem_id: str = Field(..., alias="problemId")
+    order_index: int = Field(0, alias="orderIndex")
+    points: int | None = Field(None)
+    model_config = {"populate_by_name": True}
+
+
 class CreateContestRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=255)
     description: str = Field(..., min_length=1)
@@ -16,6 +23,7 @@ class CreateContestRequest(BaseModel):
     freeze_time: int | None = Field(None, ge=0, alias="freezeTime")
     scoring_rule: str = Field(..., pattern=r"^(IOI|ACM)$", alias="scoringRule")
     visibility: str = Field(default="PUBLIC", pattern=r"^(PUBLIC|PRIVATE|CONTEST_ONLY)$")
+    problems: list[ProblemEntry] = Field(default_factory=list)
 
     model_config = {"populate_by_name": True}
 

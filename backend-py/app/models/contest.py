@@ -76,7 +76,7 @@ class ContestProblem(Base):
 
     # Relationships
     contest = relationship("Contest", back_populates="problems")
-    problem = relationship("Problem", back_populates="contest_problems")
+    problem = relationship("Problem", back_populates="contest_problems", lazy="selectin")
 
     __table_args__ = (
         UniqueConstraint("contest_id", "problem_id", name="uq_contest_problem"),

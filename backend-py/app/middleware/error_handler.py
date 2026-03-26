@@ -43,18 +43,22 @@ def _error_response(
     message: str,
     request: Request,
     details: dict | list | None = None,
+    error_ref: str | None = None,
 ) -> JSONResponse:
     """Build a standardized error response."""
     request_id = getattr(request.state, "request_id", "unknown")
+    content = {
+        "code": code,
+        "message": message,
+        "details": details,
+        "requestId": request_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if error_ref:
+        content["errorRef"] = error_ref
     return JSONResponse(
         status_code=status_code,
-        content={
-            "code": code,
-            "message": message,
-            "details": details,
-            "requestId": request_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        },
+        content=content,
     )
 
 

@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useSubmission } from '../../hooks/queries/useSubmissions';
 
 const VERDICT_MAP: Record<string, { label: string; short: string; cls: string; color: string; desc: string }> = {
@@ -17,6 +17,7 @@ const FINAL_STATUSES = ['ACCEPTED', 'WRONG_ANSWER', 'TIME_LIMIT_EXCEEDED', 'MEMO
 
 export default function SubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: sub, isLoading, isError } = useSubmission(id || '');
 
   if (isLoading) {
@@ -95,6 +96,18 @@ export default function SubmissionDetailPage() {
             </div>
           )}
         </div>
+        {/* Resubmit button for non-accepted final verdicts */}
+        {isFinal && sub.status !== 'ACCEPTED' && sub.problemId && (
+          <button
+            className="btn btn-primary"
+            style={{ whiteSpace: 'nowrap', fontSize: 13 }}
+            onClick={() => navigate(`/problems/${sub.problemId}`, {
+              state: { prefillCode: sub.sourceCode, prefillLanguage: sub.language }
+            })}
+          >
+            🔄 Resubmit
+          </button>
+        )}
       </div>
 
       {/* ── Test case mini-grid (DMOJ-style visual blocks) ── */}

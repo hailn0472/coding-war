@@ -9,6 +9,7 @@ import boto3
 from botocore.config import Config
 
 from app.config import settings
+from app.utils.checksum import compute_sha256
 from app.utils.logger import get_logger
 
 logger = get_logger("s3_service")
@@ -36,15 +37,26 @@ def get_testcase_s3_key(problem_id: str, order_index: int, file_type: str) -> st
 
 def upload_testcase_file(key: str, content: bytes) -> None:
     """
-    Upload a testcase file to S3 with server-side encryption.
-    SDRD Gap Fix: ADR-006 — encrypt at rest with AES-256.
+    Upload a testcase file to S3 with server-side encryption and Object Lock.
+    SDRD Gap Fix ADR-006:
+      TS-02: SSE-AES256 encrypts at rest
+      TS-04: COMPLIANCE Object Lock — immutable after publish, cannot be deleted/overwritten
     """
+    # Object Lock retention: lock for 10 years (testcases are immutable reference data)
+    from datetime import datetime, timezone, timedelta
+    retain_until = (datetime.now(timezone.utc) + timedelta(days=3650)).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
     _s3_client.put_object(
         Bucket=BUCKET,
         Key=key,
         Body=content,
         ContentType="text/plain",
-        ServerSideEncryption="AES256",  # ← SDRD gap fix (was missing in TS)
+        ServerSideEncryption="AES256",          # TS-02: encrypt at rest
+        Metadata={"sha256": compute_sha256(content)},
+        ObjectLockMode="COMPLIANCE",             # TS-04: immutable — can't be deleted
+        ObjectLockRetainUntilDate=retain_until,
     )
     logger.debug("Uploaded testcase to S3", key=key, size=len(content))
 

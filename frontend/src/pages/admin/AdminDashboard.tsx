@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAdminStatistics, useAdminUsers, useUpdateUserRole } from '../../hooks/queries/useAdmin';
 import { problemsAPI } from '../../api/endpoints/problems';
 import { contestsAPI } from '../../api/endpoints/contests';
 import { useProblems } from '../../hooks/queries/useProblems';
 import { useContests } from '../../hooks/queries/useContests';
+import { useToast } from '../../contexts/ToastContext';
 
 type AdminTab = 'dashboard' | 'users' | 'problems' | 'contests';
 
@@ -193,185 +194,27 @@ function UsersTab() {
 
 /* ─── Problems Tab ─── */
 function ProblemsTab() {
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [msg, setMsg] = useState({ text: '', type: '' });
+  const navigate = useNavigate();
+  const showToast = useToast();
   const { data: problems, isLoading, refetch } = useProblems({});
-
-  // Form state
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [difficulty, setDifficulty] = useState('EASY');
-  const [timeLimit, setTimeLimit] = useState('1000');
-  const [memoryLimit, setMemoryLimit] = useState('256');
-  const [tags, setTags] = useState('');
-  const [visibility, setVisibility] = useState('PUBLIC');
-  const [submitting, setSubmitting] = useState(false);
-
-  // Test upload
-  const [uploadProblemId, setUploadProblemId] = useState('');
-  const [testFile, setTestFile] = useState<File | null>(null);
-  const [sampleCount, setSampleCount] = useState('1');
-  const [uploading, setUploading] = useState(false);
-
-  const resetForm = () => {
-    setTitle(''); setDescription(''); setDifficulty('EASY');
-    setTimeLimit('1000'); setMemoryLimit('256'); setTags(''); setVisibility('PUBLIC');
-    setEditingId(null); setShowForm(false);
-  };
-
-  const handleSubmit = async () => {
-    setSubmitting(true); setMsg({ text: '', type: '' });
-    try {
-      const data = {
-        title,
-        description,
-        difficulty: difficulty as any,
-        timeLimit: parseInt(timeLimit),
-        memoryLimit: parseInt(memoryLimit),
-        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-        visibility: visibility as any,
-      };
-      if (editingId) {
-        await problemsAPI.update(editingId, data);
-        setMsg({ text: 'Problem updated!', type: 'success' });
-      } else {
-        await problemsAPI.create(data);
-        setMsg({ text: 'Problem created!', type: 'success' });
-      }
-      resetForm();
-      refetch();
-    } catch (err: any) {
-      setMsg({ text: err?.response?.data?.message || 'Failed', type: 'error' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Delete problem "${name}"? This will also delete all submissions.`)) return;
     try {
       await problemsAPI.delete(id);
-      setMsg({ text: 'Problem deleted!', type: 'success' });
+      showToast('Problem deleted!', 'success');
       refetch();
     } catch {
-      setMsg({ text: 'Failed to delete problem', type: 'error' });
+      showToast('Failed to delete problem', 'error');
     }
-  };
-
-  const handleUpload = async () => {
-    if (!uploadProblemId || !testFile) return;
-    setUploading(true); setMsg({ text: '', type: '' });
-    try {
-      const result = await problemsAPI.uploadTestCases(uploadProblemId, testFile, parseInt(sampleCount) || 0);
-      setMsg({ text: `Uploaded ${result.testCasesCount} test cases!`, type: 'success' });
-      setTestFile(null); setUploadProblemId('');
-    } catch (err: any) {
-      setMsg({ text: err?.response?.data?.message || 'Upload failed', type: 'error' });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const startEdit = (p: any) => {
-    setTitle(p.title); setDescription(p.description || '');
-    setDifficulty(p.difficulty); setTimeLimit(String(p.timeLimit));
-    setMemoryLimit(String(p.memoryLimit)); setTags((p.tags || []).join(', '));
-    setVisibility(p.visibility || 'PUBLIC'); setEditingId(p.id); setShowForm(true);
   };
 
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={() => { resetForm(); setShowForm(!showForm); }}>
-          {showForm ? '✕ Cancel' : '➕ Create Problem'}
+        <button className="btn btn-primary" style={{ fontSize: 13 }} onClick={() => navigate('/admin/problems/create')}>
+          ➕ Create Problem
         </button>
-      </div>
-
-      {msg.text && (
-        <div className={`alert alert-${msg.type}`} style={{ marginBottom: 12 }}>{msg.text}</div>
-      )}
-
-      {/* Create/Edit Form */}
-      {showForm && (
-        <div className="panel" style={{ marginBottom: 15 }}>
-          <div className="panel-header">{editingId ? 'Edit Problem' : 'Create Problem'}</div>
-          <div className="panel-body">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <div>
-                <label style={labelStyle}>Title</label>
-                <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} placeholder="Two Sum" />
-              </div>
-              <div>
-                <label style={labelStyle}>Difficulty</label>
-                <select className="form-input" value={difficulty} onChange={e => setDifficulty(e.target.value)}>
-                  <option value="EASY">EASY</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="HARD">HARD</option>
-                </select>
-              </div>
-              <div>
-                <label style={labelStyle}>Time Limit (ms)</label>
-                <input className="form-input" type="number" value={timeLimit} onChange={e => setTimeLimit(e.target.value)} />
-              </div>
-              <div>
-                <label style={labelStyle}>Memory Limit (MB)</label>
-                <input className="form-input" type="number" value={memoryLimit} onChange={e => setMemoryLimit(e.target.value)} />
-              </div>
-              <div>
-                <label style={labelStyle}>Tags (comma-separated)</label>
-                <input className="form-input" value={tags} onChange={e => setTags(e.target.value)} placeholder="array, hash-table" />
-              </div>
-              <div>
-                <label style={labelStyle}>Visibility</label>
-                <select className="form-input" value={visibility} onChange={e => setVisibility(e.target.value)}>
-                  <option value="PUBLIC">PUBLIC</option>
-                  <option value="PRIVATE">PRIVATE</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <label style={labelStyle}>Description (Markdown)</label>
-              <textarea
-                className="form-input"
-                style={{ minHeight: 150, fontFamily: 'Consolas, Monaco, monospace', fontSize: 13, resize: 'vertical' }}
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                placeholder={"## Problem Statement\n\nGiven an array of integers..."}
-              />
-            </div>
-            <button className="btn btn-primary" onClick={handleSubmit} disabled={!title || !description || submitting}>
-              {submitting ? '...' : editingId ? 'Update Problem' : 'Create Problem'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Upload Test Cases */}
-      <div className="panel" style={{ marginBottom: 15 }}>
-        <div className="panel-header">📦 Upload Test Cases (.zip)</div>
-        <div className="panel-body" style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div>
-            <label style={labelStyle}>Problem</label>
-            <select className="form-input" style={{ width: 250 }} value={uploadProblemId} onChange={e => setUploadProblemId(e.target.value)}>
-              <option value="">Select problem...</option>
-              {(problems as any)?.problems?.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.title}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Sample Count</label>
-            <input className="form-input" type="number" style={{ width: 80 }} value={sampleCount} onChange={e => setSampleCount(e.target.value)} min={0} />
-          </div>
-          <div>
-            <label style={labelStyle}>ZIP File</label>
-            <input type="file" accept=".zip" onChange={e => setTestFile(e.target.files?.[0] || null)} style={{ fontSize: 13 }} />
-          </div>
-          <button className="btn btn-primary" onClick={handleUpload} disabled={!uploadProblemId || !testFile || uploading}>
-            {uploading ? '⏳ Uploading...' : '📤 Upload'}
-          </button>
-        </div>
       </div>
 
       {/* Problems List */}
@@ -404,10 +247,14 @@ function ProblemsTab() {
                   </td>
                   <td style={{ fontSize: 12 }}>{p.timeLimit}</td>
                   <td style={{ fontSize: 12 }}>{p.memoryLimit}</td>
-                  <td style={{ fontSize: 12 }}>{p.visibility || 'PUBLIC'}</td>
+                  <td style={{ fontSize: 12 }}>
+                    <span style={{ color: p.visibility === 'PRIVATE' ? '#999' : '#333' }}>
+                      {p.visibility || 'PUBLIC'}
+                    </span>
+                  </td>
                   <td>
                     <div style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => startEdit(p)}>✏️ Edit</button>
+                      <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => navigate(`/admin/problems/${p.id}/edit`)}>✏️ Edit</button>
                       <button className="btn btn-sm" style={{ fontSize: 11, color: '#c00' }} onClick={() => handleDelete(p.id, p.title)}>🗑️</button>
                     </div>
                   </td>
@@ -426,8 +273,8 @@ function ProblemsTab() {
 
 /* ─── Contests Tab ─── */
 function ContestsTab() {
+  const showToast = useToast();
   const [showForm, setShowForm] = useState(false);
-  const [msg, setMsg] = useState({ text: '', type: '' });
   const { data: contests, isLoading, refetch } = useContests();
   const { data: problems } = useProblems({});
   const [submitting, setSubmitting] = useState(false);
@@ -450,7 +297,7 @@ function ContestsTab() {
   };
 
   const handleSubmit = async () => {
-    setSubmitting(true); setMsg({ text: '', type: '' });
+    setSubmitting(true);
     try {
       await contestsAPI.create({
         title,
@@ -458,13 +305,13 @@ function ContestsTab() {
         startTime: new Date(startTime).toISOString(),
         endTime: new Date(endTime).toISOString(),
         scoringRule: scoringRule as any,
-        problemIds: selectedProblems,
+        problems: selectedProblems.map((id, i) => ({ problemId: id, orderIndex: i })),
       } as any);
-      setMsg({ text: 'Contest created!', type: 'success' });
+      showToast('Contest created!', 'success');
       resetForm();
       refetch();
     } catch (err: any) {
-      setMsg({ text: err?.response?.data?.message || 'Failed', type: 'error' });
+      showToast(err?.response?.data?.message || 'Failed', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -478,9 +325,6 @@ function ContestsTab() {
         </button>
       </div>
 
-      {msg.text && (
-        <div className={`alert alert-${msg.type}`} style={{ marginBottom: 12 }}>{msg.text}</div>
-      )}
 
       {showForm && (
         <div className="panel" style={{ marginBottom: 15 }}>

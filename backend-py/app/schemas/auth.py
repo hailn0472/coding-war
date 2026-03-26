@@ -18,9 +18,9 @@ class LoginRequest(BaseModel):
 
 
 class TokenResponse(BaseModel):
-    access_token: str
-    refresh_token: str
-    token_type: str = "Bearer"
+    accessToken: str
+    refreshToken: str
+    tokenType: str = "Bearer"
     user: "UserBrief"
 
 
@@ -34,7 +34,7 @@ class UserBrief(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    refreshToken: str
 
 
 class VerifyEmailRequest(BaseModel):

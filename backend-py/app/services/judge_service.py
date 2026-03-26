@@ -9,10 +9,11 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.orm import selectinload
+from sqlalchemy.pool import NullPool
 
-from app.database import async_session_factory
+from app.config import settings
 from app.models.submission import Submission, TestCaseResult
 from app.models.test_case import TestCase
 from app.models.enums import SubmissionStatus
@@ -27,6 +28,23 @@ from app.utils.logger import get_logger
 logger = get_logger("judge_service")
 
 
+def _make_judge_session():
+    """
+    Create a fresh async engine + session for use inside a Celery task.
+
+    WHY NullPool: Celery's ForkPoolWorker runs each task via asyncio.run(), which
+    creates and then CLOSES a new event loop. SQLAlchemy's default connection pool
+    holds connections bound to that loop. The next task's asyncio.run() gets a new
+    loop, but the pooled connections still reference the old (closed) loop →
+    "Future attached to a different loop" crash.
+
+    NullPool disables pooling entirely: every session opens a fresh connection and
+    closes it on exit, so there are no stale event-loop references.
+    """
+    engine = create_async_engine(settings.database_url, poolclass=NullPool)
+    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+
 async def judge_submission(submission_id: str) -> None:
     """
     Main judge workflow for a single submission.
@@ -36,7 +54,8 @@ async def judge_submission(submission_id: str) -> None:
     4. Run against each test case
     5. Update results and verdict
     """
-    async with async_session_factory() as db:
+    async with _make_judge_session()() as db:
+
         # 1. Fetch submission
         result = await db.execute(
             select(Submission)
@@ -95,10 +114,12 @@ async def judge_submission(submission_id: str) -> None:
             max_memory = 0
 
             for tc in test_cases:
-                # Download and verify integrity (SDRD: SHA-256)
-                input_data = download_testcase_file(tc.input_file)
-                output_data = download_testcase_file(tc.output_file)
+                # Use inline content stored directly in the DB (dev mode — no S3 required).
+                # input_file / output_file hold raw text content seeded by seed_problems.py.
+                input_data = tc.input_file.encode()
+                output_data = tc.output_file.encode()
 
+                # Verify integrity (still compute + compare SHA-256 from stored checksum)
                 if not verify_sha256(input_data, tc.input_checksum):
                     logger.error("Input checksum mismatch", test_case_id=str(tc.id))
                     continue

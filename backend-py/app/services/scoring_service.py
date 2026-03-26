@@ -23,6 +23,45 @@ logger = get_logger("scoring_service")
 # SDRD Gap Fix: validate execution_ms range
 MAX_EXECUTION_MS = 60_000
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Atomic Redis Lua — Submission Quota (ASVS V15.4.1 TOCTOU fix)
+# Gap Fix: scoring.py asset — INCR_IF_BELOW_LIMIT_SCRIPT
+#
+# Lua scripts run atomically inside Redis — no other command can interleave.
+# The read, check, and increment happen as a single indivisible operation.
+# ──────────────────────────────────────────────────────────────────────────────
+_INCR_IF_BELOW_LIMIT_SCRIPT = """
+local key     = KEYS[1]
+local max_val = tonumber(ARGV[1])
+local current = tonumber(redis.call('GET', key) or '0')
+if current >= max_val then
+    return -1   -- rate limit exceeded
+end
+return redis.call('INCR', key)  -- atomic increment
+"""
+
+MAX_SUBMISSIONS_PER_CONTEST = 10
+
+
+async def check_and_increment_submission_quota(
+    redis,
+    user_id: str,
+    contest_id: str,
+) -> bool:
+    """
+    Atomically check-and-increment the per-user, per-contest submission quota.
+    Returns True if submission is allowed, False if limit is reached.
+    No TOCTOU race — Lua script is atomic inside Redis. (ASVS V15.4.1)
+    """
+    key = f"sub_count:{user_id}:{contest_id}"
+    result = await redis.eval(
+        _INCR_IF_BELOW_LIMIT_SCRIPT,
+        1,           # number of keys
+        key,         # KEYS[1]
+        MAX_SUBMISSIONS_PER_CONTEST,  # ARGV[1]
+    )
+    return result != -1
+
 
 def _safe_execution_time(ms: int | None) -> int:
     """Validate and clamp execution_ms (SDRD gap fix from scoring.py)."""

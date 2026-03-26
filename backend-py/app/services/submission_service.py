@@ -18,6 +18,7 @@ from app.models.problem import Problem
 from app.models.enums import Language, SubmissionStatus
 from app.services.contest_service import can_submit_to_contest, get_contest_by_id
 from app.utils.logger import get_logger
+from app.worker import enqueue_submission
 
 logger = get_logger("submission_service")
 
@@ -71,7 +72,9 @@ async def create_submission(
         problem_id=problem_id,
     )
 
-    # TODO: Enqueue to Celery for judging
+    # Enqueue to Celery for judging
+    await db.commit()
+    enqueue_submission(str(submission.id))
     return submission
 
 
@@ -110,6 +113,28 @@ async def get_submission_by_id(
         for r in (submission.test_case_results or [])
     ]
 
+    # ADR-007 / AZ-03: Determine source_code visibility
+    # - Admin: always visible
+    # - Owner: visible only when contest is no longer active
+    # - Non-owner: never visible
+    is_admin = requesting_user_role == "ADMIN"
+    is_owner = str(submission.user_id) == requesting_user_id
+
+    # Check if contest is still active (server-side time — ADR-008)
+    contest_active = False
+    if submission.contest_id:
+        from app.services.contest_service import _utc_now
+        from app.models.contest import Contest
+        ct_result = await db.execute(
+            select(Contest).where(Contest.id == submission.contest_id)
+        )
+        contest = ct_result.scalar_one_or_none()
+        if contest and contest.end_time:
+            contest_active = _utc_now() < contest.end_time
+
+    # Strip source_code for non-owners or owner during active contest
+    show_source = is_admin or (is_owner and not contest_active)
+
     return {
         "id": str(submission.id),
         "problemId": str(submission.problem_id),
@@ -117,12 +142,12 @@ async def get_submission_by_id(
         "userId": str(submission.user_id),
         "username": submission.user.username if submission.user else None,
         "language": submission.language.value,
-        "sourceCode": submission.source_code,
+        "sourceCode": submission.source_code if show_source else None,
         "status": submission.status.value,
         "verdict": submission.verdict,
         "executionTime": submission.execution_time,
         "memoryUsed": submission.memory_used,
-        "compilationError": submission.compilation_error,
+        "compilationError": submission.compilation_error if show_source else None,
         "testCaseResults": test_case_results if test_case_results else None,
         "submittedAt": submission.submitted_at.isoformat(),
         "judgedAt": submission.judged_at.isoformat() if submission.judged_at else None,

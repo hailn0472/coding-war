@@ -18,6 +18,9 @@ export const contestsAPI = {
   register: (id: string) =>
     apiClient.post<{ message: string }>(`/api/contests/${id}/register`),
 
+  updateProblems: (id: string, problems: { problemId: string; orderIndex?: number; points?: number }[]) =>
+    apiClient.put<{ message: string }>(`/api/contests/${id}/problems`, problems),
+
   scoreboard: (id: string) =>
     apiClient.get<ScoreboardResponse>(`/api/contests/${id}/scoreboard`),
 };

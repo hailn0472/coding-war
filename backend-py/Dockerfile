@@ -23,8 +23,12 @@ COPY . .
 
 # Non-root user for security
 RUN useradd -m appuser
+
+# Make entrypoint executable
+RUN chmod +x /app/entrypoint.sh
+
 USER appuser
 
 EXPOSE 3000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000", "--workers", "4"]
+CMD ["/app/entrypoint.sh"]

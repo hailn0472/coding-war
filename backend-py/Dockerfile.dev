@@ -17,5 +17,5 @@ COPY . .
 # Expose port
 EXPOSE 3000
 
-# Development command with auto-reload
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000", "--reload"]
+# Development command: run migrations then start server with auto-reload
+CMD ["sh", "-c", "cd /app && PYTHONPATH=/app alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 3000 --reload"]

@@ -22,7 +22,7 @@ router = APIRouter()
 logger = get_logger("submissions_router")
 
 
-@router.post("/", status_code=201)
+@router.post("", status_code=201)
 async def create_submission_endpoint(
     data: CreateSubmissionRequest,
     db: AsyncSession = Depends(get_db),
@@ -52,7 +52,7 @@ async def get_submission_endpoint(
     )
 
 
-@router.get("/")
+@router.get("")
 async def list_submissions_endpoint(
     page: int = 1,
     limit: int = 20,

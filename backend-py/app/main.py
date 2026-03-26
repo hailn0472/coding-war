@@ -26,6 +26,21 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Application startup and shutdown events."""
     logger.info("Starting Coding War Backend", environment=settings.environment)
+
+    # Apply schema migrations (idempotent raw SQL — safe to run on every start)
+    try:
+        from sqlalchemy import text
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS input_content TEXT"
+            ))
+            await conn.execute(text(
+                "ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS output_content TEXT"
+            ))
+        logger.info("Schema migrations applied")
+    except Exception as e:
+        logger.warning("Schema migration warning", error=str(e))
+
     yield
     # Shutdown: dispose database engine
     await engine.dispose()
@@ -38,12 +53,26 @@ app = FastAPI(
     description="Backend API for Coding War - Online Judge Platform",
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url="/redoc" if settings.environment != "production" else None,
+    redirect_slashes=False,
     lifespan=lifespan,
 )
 
 # ─── Middleware (order matters: last added = first executed) ───
 
-# CORS
+# GZip Compression (equivalent to `compression()`)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Security Headers (equivalent to `helmet()`) — now BaseHTTPMiddleware subclass
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Request ID (equivalent to `requestIdMiddleware`)
+app.add_middleware(BaseHTTPMiddleware, dispatch=RequestIdMiddleware())
+
+# Request Logger
+app.add_middleware(BaseHTTPMiddleware, dispatch=RequestLoggerMiddleware())
+
+# CORS — must be last added (= first executed) so preflight OPTIONS requests
+# are handled before any other middleware touches the request/response.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -51,18 +80,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# GZip Compression (equivalent to `compression()`)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# Security Headers (equivalent to `helmet()`)
-app.add_middleware(BaseHTTPMiddleware, dispatch=SecurityHeadersMiddleware())
-
-# Request ID (equivalent to `requestIdMiddleware`)
-app.add_middleware(BaseHTTPMiddleware, dispatch=RequestIdMiddleware())
-
-# Request Logger
-app.add_middleware(BaseHTTPMiddleware, dispatch=RequestLoggerMiddleware())
 
 # ─── Exception Handlers ───
 register_exception_handlers(app)
@@ -87,9 +104,14 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
 
-# ─── Mount Socket.IO ───
-from app.services.socket_service import socket_app  # noqa: E402
-app.mount("/socket.io", socket_app)
+# ─── Socket.IO — wrap FastAPI as the inner ASGI app ───
+# This is the recommended pattern: socket.io is the OUTER ASGI layer.
+# /socket.io/* → handled by socket.io (its own CORS)
+# everything else → passed through to FastAPI (its own CORSMiddleware)
+import socketio as _sio_module  # noqa: E402
+from app.services.socket_service import sio  # noqa: E402
+
+top_app = _sio_module.ASGIApp(sio, other_asgi_app=app, socketio_path="socket.io")
 
 
 # ─── API Info ───

@@ -51,7 +51,7 @@ def verify_password(password: str, hashed: str) -> bool:
         if _is_bcrypt_hash(hashed):
             return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
         return _argon2_hasher.verify(hashed, password)
-    except (argon2.exceptions.VerifyMismatchError, ValueError):
+    except (argon2.exceptions.VerifyMismatchError, argon2.exceptions.VerificationError, ValueError):
         return False
 
 
@@ -71,17 +71,20 @@ def generate_access_token(user_id: str, role: str) -> str:
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
 
-def generate_refresh_token(user_id: str) -> str:
-    """Generate a refresh token (JWT) with longer expiration."""
+def generate_refresh_token(user_id: str) -> tuple[str, str]:
+    """Generate a refresh token (JWT) with longer expiration. Returns (token, jti)."""
+    import uuid as _uuid
+    jti = str(_uuid.uuid4())
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.refresh_token_expiry_minutes
     )
     payload = {
         "userId": user_id,
+        "jti": jti,
         "exp": expire,
         "iat": datetime.now(timezone.utc),
     }
-    return jwt.encode(payload, settings.jwt_refresh_secret, algorithm="HS256")
+    return jwt.encode(payload, settings.jwt_refresh_secret, algorithm="HS256"), jti
 
 
 def verify_access_token(token: str) -> dict | None:
@@ -94,10 +97,10 @@ def verify_access_token(token: str) -> dict | None:
 
 
 def verify_refresh_token(token: str) -> dict | None:
-    """Verify and decode a refresh token. Returns payload or None."""
+    """Verify and decode a refresh token. Returns payload (with jti) or None."""
     try:
         payload = jwt.decode(token, settings.jwt_refresh_secret, algorithms=["HS256"])
-        return {"userId": payload["userId"]}
+        return {"userId": payload["userId"], "jti": payload.get("jti", ""), "exp": payload.get("exp")}
     except JWTError:
         return None
 

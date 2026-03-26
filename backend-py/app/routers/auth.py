@@ -35,6 +35,7 @@ from app.services.auth_service import (
     verify_password,
     verify_refresh_token,
 )
+from app.services.token_revocation_service import is_token_revoked, revoke_refresh_token
 from app.utils.logger import get_logger
 
 router = APIRouter()
@@ -86,13 +87,24 @@ async def verify_email(data: VerifyEmailRequest, db: AsyncSession = Depends(get_
     return MessageResponse(message="Email verified successfully")
 
 
+# Dummy hash used when user doesn't exist — prevents timing-based email enumeration.
+# Running verify_password against this ensures both code paths take the same time.
+# Pattern from assets/code/fixed/error_handlers.py (ASVS V6.3.3)
+_DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$dummysaltdummysalt$dummyhashplaceholder000000000000"
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """User login with JWT."""
     result = await db.execute(select(User).where(User.email == data.email))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(data.password, user.password_hash):
+    # Always run password verification — use dummy hash if user not found
+    # This prevents timing attacks that could enumerate valid email addresses
+    hash_to_check = user.password_hash if user else _DUMMY_HASH
+    password_ok = verify_password(data.password, hash_to_check)
+
+    if not user or not password_ok:
         raise AppError(401, "INVALID_CREDENTIALS", "Invalid email or password")
 
     # Rehash legacy bcrypt passwords to Argon2id
@@ -101,11 +113,11 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
         logger.info("Rehashed legacy password", user_id=str(user.id))
 
     access_token = generate_access_token(str(user.id), user.role.value)
-    refresh_token = generate_refresh_token(str(user.id))
+    refresh_token, _ = generate_refresh_token(str(user.id))  # jti stored inside token
 
     return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
+        accessToken=access_token,
+        refreshToken=refresh_token,
         user=UserBrief(
             id=str(user.id),
             username=user.username,
@@ -117,10 +129,15 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(data: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Refresh access token."""
+    """Refresh access token. Checks revocation blocklist before issuing new tokens."""
     payload = verify_refresh_token(data.refresh_token)
     if not payload:
         raise AppError(401, "INVALID_TOKEN", "Invalid or expired refresh token")
+
+    # Gap fix #4: Check if this refresh token has been revoked (e.g. via logout)
+    jti = payload.get("jti", "")
+    if jti and await is_token_revoked(jti):
+        raise AppError(401, "TOKEN_REVOKED", "Refresh token has been revoked")
 
     user_id = payload["userId"]
     result = await db.execute(select(User).where(User.id == user_id))
@@ -130,11 +147,11 @@ async def refresh_token(data: RefreshRequest, db: AsyncSession = Depends(get_db)
         raise AppError(401, "USER_NOT_FOUND", "User not found")
 
     new_access = generate_access_token(str(user.id), user.role.value)
-    new_refresh = generate_refresh_token(str(user.id))
+    new_refresh, _ = generate_refresh_token(str(user.id))
 
     return TokenResponse(
-        access_token=new_access,
-        refresh_token=new_refresh,
+        accessToken=new_access,
+        refreshToken=new_refresh,
         user=UserBrief(
             id=str(user.id),
             username=user.username,
@@ -142,6 +159,22 @@ async def refresh_token(data: RefreshRequest, db: AsyncSession = Depends(get_db)
             role=user.role.value,
         ),
     )
+
+
+@router.post("/logout", response_model=MessageResponse)
+async def logout(data: RefreshRequest):
+    """
+    Logout: revoke the provided refresh token.
+    Gap fix #4: Revoked JTIs are stored in Redis until the token's natural expiry.
+    Access tokens remain valid until they expire (short TTL handles this).
+    """
+    payload = verify_refresh_token(data.refresh_token)
+    if payload and payload.get("jti") and payload.get("exp"):
+        from datetime import datetime, timezone as _tz
+        ttl = max(0, int(payload["exp"] - datetime.now(_tz.utc).timestamp()))
+        await revoke_refresh_token(payload["jti"], ttl)
+    # Always return success — don't reveal whether the token was valid
+    return MessageResponse(message="Logged out successfully")
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

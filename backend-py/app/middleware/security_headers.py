@@ -1,10 +1,14 @@
 """
 Security Headers Middleware
 Equivalent to: helmet() in backend/src/index.ts
-SDRD: ASVS V3.4 (security headers) + assets/code/fixed/security_headers.py
+Gap Fix: CSP per-request nonce + HSTS preload
+Pattern from: assets/code/fixed/security_headers.py (ASVS V3.4)
 """
 
+import secrets
+
 from app.config import settings
+from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -12,60 +16,68 @@ from starlette.responses import Response
 _DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
 
 
-class SecurityHeadersMiddleware:
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
     Set security headers on every response.
-    Implements the same protections as helmet.js:
-    - Content-Security-Policy
-    - X-Content-Type-Options: nosniff
-    - X-Frame-Options: DENY
-    - Strict-Transport-Security (HSTS)
-    - X-XSS-Protection
-    - Referrer-Policy
-    - Permissions-Policy
+    ASVS V3.4 controls:
+      V3.4.1 — CSP (nonce-based per request, no unsafe-inline)
+      V3.4.2 — HSTS (1 year, includeSubDomains, preload)
+      V3.4.3 — X-Content-Type-Options: nosniff
+      V3.4.4 — X-Frame-Options: DENY
+      V3.4.5 — Referrer-Policy
     """
 
-    async def __call__(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next) -> Response:
+        # Generate a unique nonce for this request (ASVS V3.4.1)
+        nonce = secrets.token_urlsafe(16)
+        request.state.csp_nonce = nonce
+
         response = await call_next(request)
 
-        # Prevent MIME type sniffing
-        response.headers["X-Content-Type-Options"] = "nosniff"
-
-        # Prevent clickjacking
-        response.headers["X-Frame-Options"] = "DENY"
-
-        # Enable HSTS (1 year, include subdomains)
+        # HSTS — 1 year, includeSubDomains, preload (ASVS V3.4.2)
         response.headers["Strict-Transport-Security"] = (
-            "max-age=31536000; includeSubDomains"
+            "max-age=31536000; includeSubDomains; preload"
         )
 
-        # XSS Protection (legacy, but defense-in-depth)
-        response.headers["X-XSS-Protection"] = "0"
+        # MIME sniffing prevention (ASVS V3.4.3)
+        response.headers["X-Content-Type-Options"] = "nosniff"
 
-        # Prevent referrer leakage
+        # Clickjacking prevention (ASVS V3.4.4)
+        response.headers["X-Frame-Options"] = "DENY"
+
+        # Referrer control (ASVS V3.4.5)
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
 
-        # Content Security Policy
-        if request.url.path in _DOCS_PATHS and settings.environment != "production":
-            # Relaxed CSP for Swagger UI in development
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
-                "img-src 'self' data: https://fastapi.tiangolo.com; "
-                "connect-src 'self'; "
-                "frame-ancestors 'none'"
-            )
-        else:
-            # Strict CSP for API endpoints
-            response.headers["Content-Security-Policy"] = (
-                "default-src 'none'; frame-ancestors 'none'"
-            )
-
-        # Permissions Policy — disable unused browser features
+        # Permissions Policy — disable unneeded browser APIs
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=(), payment=()"
         )
+
+        # Content Security Policy
+        if request.url.path in _DOCS_PATHS and settings.environment != "production":
+            # Relaxed CSP for Swagger UI in development (CDN + inline scripts)
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                f"script-src 'self' 'nonce-{nonce}' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: https://fastapi.tiangolo.com; "
+                "connect-src 'self'; "
+                "object-src 'none'; "
+                "base-uri 'self'; "
+                "frame-ancestors 'none'"
+            )
+        else:
+            # Strict nonce-based CSP for all API responses (ASVS V3.4.1)
+            response.headers["Content-Security-Policy"] = (
+                f"default-src 'self'; "
+                f"script-src 'self' 'nonce-{nonce}'; "
+                "style-src 'self'; "
+                "img-src 'self' data:; "
+                "object-src 'none'; "
+                "base-uri 'self'; "
+                "form-action 'self'; "
+                "frame-ancestors 'none'"
+            )
 
         # Remove server identification header
         if "server" in response.headers:

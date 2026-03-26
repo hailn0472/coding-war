@@ -96,13 +96,9 @@ async def list_problems(
         query = query.where(Problem.difficulty == Difficulty(difficulty))
         count_query = count_query.where(Problem.difficulty == Difficulty(difficulty))
 
-    if visibility:
+    if visibility is not None:
         query = query.where(Problem.visibility == Visibility(visibility))
         count_query = count_query.where(Problem.visibility == Visibility(visibility))
-    else:
-        # Default: public problems only for non-admin
-        query = query.where(Problem.visibility == Visibility.PUBLIC)
-        count_query = count_query.where(Problem.visibility == Visibility.PUBLIC)
 
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0

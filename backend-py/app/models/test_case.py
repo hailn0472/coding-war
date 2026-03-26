@@ -24,10 +24,12 @@ class TestCase(Base):
         ForeignKey("problems.id", ondelete="CASCADE"),
         nullable=False,
     )
-    input_file: Mapped[str] = mapped_column(Text, nullable=False)      # S3 object key
-    output_file: Mapped[str] = mapped_column(Text, nullable=False)     # S3 object key
-    input_checksum: Mapped[str] = mapped_column(String, nullable=False)   # SHA-256 hex
-    output_checksum: Mapped[str] = mapped_column(String, nullable=False)  # SHA-256 hex
+    input_file: Mapped[str] = mapped_column(Text, nullable=False, default="")      # S3 object key (legacy)
+    output_file: Mapped[str] = mapped_column(Text, nullable=False, default="")     # S3 object key (legacy)
+    input_content: Mapped[str | None] = mapped_column(Text, nullable=True)         # Inline text (admin TXT)
+    output_content: Mapped[str | None] = mapped_column(Text, nullable=True)        # Inline text (admin TXT)
+    input_checksum: Mapped[str] = mapped_column(String, nullable=False, default="")
+    output_checksum: Mapped[str] = mapped_column(String, nullable=False, default="")
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=True)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
